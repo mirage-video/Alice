@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alice"
+version = "0.0.1"
+description = "Alice: Text-to-Video Generation Model"
+authors = [
+    { name = "Mirage Team" }
+]
+license = { file = "LICENSE.txt" }
+readme = "README.md"
+requires-python = ">=3.9"
+
+[tool.setuptools]
+packages = ["alice"]
