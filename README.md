@@ -1,3 +1,3 @@
 # Alice
 
-Alice Tex-to-Video Generation Model
+Alice Text-to-Video Generation Model
