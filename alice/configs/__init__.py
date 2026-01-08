@@ -1,0 +1,3 @@
+ALICE_CONFIGS = {}
+
+SIZE_CONFIGS = {}
