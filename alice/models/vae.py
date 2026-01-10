@@ -45,5 +45,12 @@ class RMS_norm(nn.Module):
                     -1)) * self.scale * self.gamma + self.bias
 
 
+class Upsample(nn.Upsample):
+
+    def forward(self, x):
+        """Upsample with bfloat16 support."""
+        return super().forward(x.float()).type_as(x)
+
+
 class AliceVAE:
     pass
