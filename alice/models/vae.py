@@ -95,5 +95,27 @@ class Resample(nn.Module):
         return x
 
 
+class ResidualBlock(nn.Module):
+
+    def __init__(self, in_dim, out_dim, dropout=0.0):
+        super().__init__()
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+
+        self.residual = nn.Sequential(
+            RMS_norm(in_dim, images=False), nn.SiLU(),
+            CausalConv3d(in_dim, out_dim, 3, padding=1),
+            RMS_norm(out_dim, images=False), nn.SiLU(), nn.Dropout(dropout),
+            CausalConv3d(out_dim, out_dim, 3, padding=1))
+        self.shortcut = CausalConv3d(in_dim, out_dim, 1) \
+            if in_dim != out_dim else nn.Identity()
+
+    def forward(self, x):
+        h = self.shortcut(x)
+        for layer in self.residual:
+            x = layer(x)
+        return x + h
+
+
 class AliceVAE:
     pass
