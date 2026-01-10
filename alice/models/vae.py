@@ -12,9 +12,8 @@ class CausalConv3d(nn.Conv3d):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Bug: incorrect padding tuple order
-        self._padding = (self.padding[0], self.padding[0], self.padding[1],
-                         self.padding[1], 2 * self.padding[2], 0)
+        self._padding = (self.padding[2], self.padding[2], self.padding[1],
+                         self.padding[1], 2 * self.padding[0], 0)
         self.padding = (0, 0, 0)
 
     def forward(self, x, cache_x=None):
