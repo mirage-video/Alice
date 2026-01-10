@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from einops import rearrange
 
 __all__ = [
     'AliceVAE',
@@ -50,6 +51,48 @@ class Upsample(nn.Upsample):
     def forward(self, x):
         """Upsample with bfloat16 support."""
         return super().forward(x.float()).type_as(x)
+
+
+class Resample(nn.Module):
+
+    def __init__(self, dim, mode):
+        assert mode in ('none', 'upsample2d', 'upsample3d', 'downsample2d',
+                        'downsample3d')
+        super().__init__()
+        self.dim = dim
+        self.mode = mode
+
+        if mode == 'upsample2d':
+            self.resample = nn.Sequential(
+                Upsample(scale_factor=(2., 2.), mode='nearest-exact'),
+                nn.Conv2d(dim, dim // 2, 3, padding=1))
+        elif mode == 'upsample3d':
+            self.resample = nn.Sequential(
+                Upsample(scale_factor=(2., 2.), mode='nearest-exact'),
+                nn.Conv2d(dim, dim // 2, 3, padding=1))
+            self.time_conv = CausalConv3d(
+                dim, dim * 2, (3, 1, 1), padding=(1, 0, 0))
+
+        elif mode == 'downsample2d':
+            self.resample = nn.Sequential(
+                nn.ZeroPad2d((0, 1, 0, 1)),
+                nn.Conv2d(dim, dim, 3, stride=(2, 2)))
+        elif mode == 'downsample3d':
+            self.resample = nn.Sequential(
+                nn.ZeroPad2d((0, 1, 0, 1)),
+                nn.Conv2d(dim, dim, 3, stride=(2, 2)))
+            self.time_conv = CausalConv3d(
+                dim, dim, (3, 1, 1), stride=(2, 1, 1), padding=(0, 0, 0))
+
+        else:
+            self.resample = nn.Identity()
+
+    def forward(self, x):
+        b, c, t, h, w = x.size()
+        x = rearrange(x, 'b c t h w -> (b t) c h w')
+        x = self.resample(x)
+        x = rearrange(x, '(b t) c h w -> b c t h w', t=t)
+        return x
 
 
 class AliceVAE:
