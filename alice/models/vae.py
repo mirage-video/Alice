@@ -117,5 +117,40 @@ class ResidualBlock(nn.Module):
         return x + h
 
 
+class AttentionBlock(nn.Module):
+    """Single-head causal self-attention."""
+
+    def __init__(self, dim):
+        super().__init__()
+        self.dim = dim
+
+        self.norm = RMS_norm(dim)
+        self.to_qkv = nn.Conv2d(dim, dim * 3, 1)
+        self.proj = nn.Conv2d(dim, dim, 1)
+
+        nn.init.zeros_(self.proj.weight)
+
+    def forward(self, x):
+        identity = x
+        b, c, t, h, w = x.size()
+        x = rearrange(x, 'b c t h w -> (b t) c h w')
+        x = self.norm(x)
+        q, k, v = self.to_qkv(x).reshape(b * t, 1, c * 3,
+                                         -1).permute(0, 1, 3,
+                                                     2).contiguous().chunk(
+                                                         3, dim=-1)
+
+        x = F.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+        )
+        x = x.squeeze(1).permute(0, 2, 1).reshape(b * t, c, h, w)
+
+        x = self.proj(x)
+        x = rearrange(x, '(b t) c h w-> b c t h w', t=t)
+        return x + identity
+
+
 class AliceVAE:
     pass
