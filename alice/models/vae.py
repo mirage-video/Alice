@@ -152,5 +152,62 @@ class AttentionBlock(nn.Module):
         return x + identity
 
 
+class Encoder3d(nn.Module):
+
+    def __init__(self,
+                 dim=128,
+                 z_dim=4,
+                 dim_mult=[1, 2, 4, 4],
+                 num_res_blocks=2,
+                 attn_scales=[],
+                 temperal_downsample=[True, True, False],
+                 dropout=0.0):
+        super().__init__()
+        self.dim = dim
+        self.z_dim = z_dim
+        self.dim_mult = dim_mult
+        self.num_res_blocks = num_res_blocks
+        self.attn_scales = attn_scales
+        self.temperal_downsample = temperal_downsample
+
+        dims = [dim * u for u in [1] + dim_mult]
+        scale = 1.0
+
+        self.conv1 = CausalConv3d(3, dims[0], 3, padding=1)
+
+        downsamples = []
+        for i, (in_dim, out_dim) in enumerate(zip(dims[:-1], dims[1:])):
+            for _ in range(num_res_blocks):
+                downsamples.append(ResidualBlock(in_dim, out_dim, dropout))
+                if scale in attn_scales:
+                    downsamples.append(AttentionBlock(out_dim))
+                in_dim = out_dim
+
+            if i != len(dim_mult) - 1:
+                mode = 'downsample3d' if temperal_downsample[
+                    i] else 'downsample2d'
+                downsamples.append(Resample(out_dim, mode=mode))
+                scale /= 2.0
+        self.downsamples = nn.Sequential(*downsamples)
+
+        self.middle = nn.Sequential(
+            ResidualBlock(out_dim, out_dim, dropout), AttentionBlock(out_dim),
+            ResidualBlock(out_dim, out_dim, dropout))
+
+        self.head = nn.Sequential(
+            RMS_norm(out_dim, images=False), nn.SiLU(),
+            CausalConv3d(out_dim, z_dim, 3, padding=1))
+
+    def forward(self, x):
+        x = self.conv1(x)
+        for layer in self.downsamples:
+            x = layer(x)
+        for layer in self.middle:
+            x = layer(x)
+        for layer in self.head:
+            x = layer(x)
+        return x
+
+
 class AliceVAE:
     pass
