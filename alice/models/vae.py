@@ -267,5 +267,43 @@ class Decoder3d(nn.Module):
         return x
 
 
+class AliceVAECore(nn.Module):
+
+    def __init__(self,
+                 dim=128,
+                 z_dim=4,
+                 dim_mult=[1, 2, 4, 4],
+                 num_res_blocks=2,
+                 attn_scales=[],
+                 temperal_downsample=[True, True, False],
+                 dropout=0.0):
+        super().__init__()
+        self.dim = dim
+        self.z_dim = z_dim
+        self.dim_mult = dim_mult
+        self.num_res_blocks = num_res_blocks
+        self.attn_scales = attn_scales
+        self.temperal_downsample = temperal_downsample
+        self.temperal_upsample = temperal_downsample[::-1]
+
+        self.encoder = Encoder3d(dim, z_dim * 2, dim_mult, num_res_blocks,
+                                 attn_scales, self.temperal_downsample, dropout)
+        self.conv1 = CausalConv3d(z_dim * 2, z_dim * 2, 1)
+        self.conv2 = CausalConv3d(z_dim, z_dim, 1)
+        self.decoder = Decoder3d(dim, z_dim, dim_mult, num_res_blocks,
+                                 attn_scales, self.temperal_upsample, dropout)
+
+    def forward(self, x):
+        mu, log_var = self.encode(x)
+        z = self.reparameterize(mu, log_var)
+        x_recon = self.decode(z)
+        return x_recon, mu, log_var
+
+    def reparameterize(self, mu, log_var):
+        std = torch.exp(0.5 * log_var)
+        eps = torch.randn_like(std)
+        return eps * std + mu
+
+
 class AliceVAE:
     pass
