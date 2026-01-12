@@ -41,9 +41,9 @@ class RMS_norm(nn.Module):
         self.bias = nn.Parameter(torch.zeros(shape)) if bias else 0.
 
     def forward(self, x):
-        return F.normalize(
-            x, dim=(1 if self.channel_first else
-                    -1)) * self.scale * self.gamma + self.bias
+        # Use float32 for normalize to avoid precision issues
+        normalized = F.normalize(x.float(), dim=(1 if self.channel_first else -1))
+        return normalized.type_as(x) * self.scale * self.gamma + self.bias
 
 
 class Upsample(nn.Upsample):
