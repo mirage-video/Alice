@@ -299,10 +299,37 @@ class AliceVAECore(nn.Module):
         x_recon = self.decode(z)
         return x_recon, mu, log_var
 
+    def encode(self, x, scale):
+        out = self.encoder(x)
+        mu, log_var = self.conv1(out).chunk(2, dim=1)
+        if isinstance(scale[0], torch.Tensor):
+            mu = (mu - scale[0].view(1, self.z_dim, 1, 1, 1)) * scale[1].view(
+                1, self.z_dim, 1, 1, 1)
+        else:
+            mu = (mu - scale[0]) * scale[1]
+        return mu
+
+    def decode(self, z, scale):
+        if isinstance(scale[0], torch.Tensor):
+            z = z / scale[1].view(1, self.z_dim, 1, 1, 1) + scale[0].view(
+                1, self.z_dim, 1, 1, 1)
+        else:
+            z = z / scale[1] + scale[0]
+        x = self.conv2(z)
+        out = self.decoder(x)
+        return out
+
     def reparameterize(self, mu, log_var):
         std = torch.exp(0.5 * log_var)
         eps = torch.randn_like(std)
         return eps * std + mu
+
+    def sample(self, imgs, deterministic=False):
+        mu, log_var = self.encode(imgs)
+        if deterministic:
+            return mu
+        std = torch.exp(0.5 * log_var.clamp(-30.0, 20.0))
+        return mu + std * torch.randn_like(std)
 
 
 class AliceVAE:
