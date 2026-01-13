@@ -7,6 +7,8 @@ __all__ = [
     'AliceVAE',
 ]
 
+CACHE_T = 2
+
 
 class CausalConv3d(nn.Conv3d):
     """Causal 3D convolution with temporal padding."""
