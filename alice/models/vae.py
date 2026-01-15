@@ -435,4 +435,30 @@ def _video_vae(pretrained_path=None, z_dim=None, device='cpu', **kwargs):
 
 
 class AliceVAE:
-    pass
+
+    def __init__(self,
+                 z_dim=16,
+                 vae_pth='cache/vae_step_411000.pth',
+                 dtype=torch.float,
+                 device="cuda"):
+        self.dtype = dtype
+        self.device = device
+
+        self.model = _video_vae(
+            pretrained_path=vae_pth,
+            z_dim=z_dim,
+        ).eval().requires_grad_(False).to(device)
+
+    def encode(self, videos):
+        """Encode videos [C, T, H, W] to latent space."""
+        return [
+            self.model.encode(u.unsqueeze(0), self.scale).float().squeeze(0)
+            for u in videos
+        ]
+
+    def decode(self, zs):
+        return [
+            self.model.decode(u.unsqueeze(0),
+                              self.scale).float().clamp_(-1, 1).squeeze(0)
+            for u in zs
+        ]
