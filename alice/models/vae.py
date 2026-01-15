@@ -413,5 +413,26 @@ def count_conv3d(model):
     return count
 
 
+def _video_vae(pretrained_path=None, z_dim=None, device='cpu', **kwargs):
+    """Load VAE model from pretrained checkpoint."""
+    cfg = dict(
+        dim=96,
+        z_dim=z_dim,
+        dim_mult=[1, 2, 4, 4],
+        num_res_blocks=2,
+        attn_scales=[],
+        temperal_downsample=[False, True, True],
+        dropout=0.0)
+    cfg.update(**kwargs)
+
+    with torch.device('meta'):
+        model = AliceVAECore(**cfg)
+
+    model.load_state_dict(
+        torch.load(pretrained_path, map_location=device), assign=True)
+
+    return model
+
+
 class AliceVAE:
     pass
