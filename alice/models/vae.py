@@ -1,4 +1,7 @@
+import logging
+
 import torch
+import torch.cuda.amp as amp
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
@@ -428,6 +431,7 @@ def _video_vae(pretrained_path=None, z_dim=None, device='cpu', **kwargs):
     with torch.device('meta'):
         model = AliceVAECore(**cfg)
 
+    logging.info(f'loading {pretrained_path}')
     model.load_state_dict(
         torch.load(pretrained_path, map_location=device), assign=True)
 
@@ -463,14 +467,16 @@ class AliceVAE:
 
     def encode(self, videos):
         """Encode videos [C, T, H, W] to latent space."""
-        return [
-            self.model.encode(u.unsqueeze(0), self.scale).float().squeeze(0)
-            for u in videos
-        ]
+        with amp.autocast(dtype=self.dtype):
+            return [
+                self.model.encode(u.unsqueeze(0), self.scale).float().squeeze(0)
+                for u in videos
+            ]
 
     def decode(self, zs):
-        return [
-            self.model.decode(u.unsqueeze(0),
-                              self.scale).float().clamp_(-1, 1).squeeze(0)
-            for u in zs
-        ]
+        with amp.autocast(dtype=self.dtype):
+            return [
+                self.model.decode(u.unsqueeze(0),
+                                  self.scale).float().clamp_(-1, 1).squeeze(0)
+                for u in zs
+            ]
