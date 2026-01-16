@@ -18,6 +18,7 @@ dependencies = [
     "numpy",
     "easydict",
     "einops",
+    "imageio",
 ]
 
 [tool.setuptools]
