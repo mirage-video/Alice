@@ -46,9 +46,9 @@ class RMS_norm(nn.Module):
         self.bias = nn.Parameter(torch.zeros(shape)) if bias else 0.
 
     def forward(self, x):
-        # Use float32 for normalize to avoid precision issues
-        normalized = F.normalize(x.float(), dim=(1 if self.channel_first else -1))
-        return normalized.type_as(x) * self.scale * self.gamma + self.bias
+        return F.normalize(
+            x, dim=(1 if self.channel_first else
+                    -1)) * self.scale * self.gamma + self.bias
 
 
 class Upsample(nn.Upsample):
@@ -148,6 +148,27 @@ class Resample(nn.Module):
                     feat_cache[idx] = cache_x
                     feat_idx[0] += 1
         return x
+
+    def init_weight(self, conv):
+        conv_weight = conv.weight
+        nn.init.zeros_(conv_weight)
+        c1, c2, t, h, w = conv_weight.size()
+        one_matrix = torch.eye(c1, c2)
+        init_matrix = one_matrix
+        nn.init.zeros_(conv_weight)
+        conv_weight.data[:, :, 1, 0, 0] = init_matrix  #* 0.5
+        conv.weight.data.copy_(conv_weight)
+        nn.init.zeros_(conv.bias.data)
+
+    def init_weight2(self, conv):
+        conv_weight = conv.weight.data
+        nn.init.zeros_(conv_weight)
+        c1, c2, t, h, w = conv_weight.size()
+        init_matrix = torch.eye(c1 // 2, c2)
+        conv_weight[:c1 // 2, :, -1, 0, 0] = init_matrix
+        conv_weight[c1 // 2:, :, -1, 0, 0] = init_matrix
+        conv.weight.data.copy_(conv_weight)
+        nn.init.zeros_(conv.bias.data)
 
 
 class ResidualBlock(nn.Module):
@@ -266,14 +287,49 @@ class Encoder3d(nn.Module):
             RMS_norm(out_dim, images=False), nn.SiLU(),
             CausalConv3d(out_dim, z_dim, 3, padding=1))
 
-    def forward(self, x):
-        x = self.conv1(x)
+    def forward(self, x, feat_cache=None, feat_idx=[0]):
+        if feat_cache is not None:
+            idx = feat_idx[0]
+            cache_x = x[:, :, -CACHE_T:, :, :].clone()
+            if cache_x.shape[2] < 2 and feat_cache[idx] is not None:
+                cache_x = torch.cat([
+                    feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(
+                        cache_x.device), cache_x
+                ],
+                                    dim=2)
+            x = self.conv1(x, feat_cache[idx])
+            feat_cache[idx] = cache_x
+            feat_idx[0] += 1
+        else:
+            x = self.conv1(x)
+
         for layer in self.downsamples:
-            x = layer(x)
+            if feat_cache is not None:
+                x = layer(x, feat_cache, feat_idx)
+            else:
+                x = layer(x)
+
         for layer in self.middle:
-            x = layer(x)
+            if isinstance(layer, ResidualBlock) and feat_cache is not None:
+                x = layer(x, feat_cache, feat_idx)
+            else:
+                x = layer(x)
+
         for layer in self.head:
-            x = layer(x)
+            if isinstance(layer, CausalConv3d) and feat_cache is not None:
+                idx = feat_idx[0]
+                cache_x = x[:, :, -CACHE_T:, :, :].clone()
+                if cache_x.shape[2] < 2 and feat_cache[idx] is not None:
+                    cache_x = torch.cat([
+                        feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(
+                            cache_x.device), cache_x
+                    ],
+                                        dim=2)
+                x = layer(x, feat_cache[idx])
+                feat_cache[idx] = cache_x
+                feat_idx[0] += 1
+            else:
+                x = layer(x)
         return x
 
 
@@ -324,15 +380,58 @@ class Decoder3d(nn.Module):
             RMS_norm(out_dim, images=False), nn.SiLU(),
             CausalConv3d(out_dim, 3, 3, padding=1))
 
-    def forward(self, x):
-        x = self.conv1(x)
+    def forward(self, x, feat_cache=None, feat_idx=[0]):
+        if feat_cache is not None:
+            idx = feat_idx[0]
+            cache_x = x[:, :, -CACHE_T:, :, :].clone()
+            if cache_x.shape[2] < 2 and feat_cache[idx] is not None:
+                cache_x = torch.cat([
+                    feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(
+                        cache_x.device), cache_x
+                ],
+                                    dim=2)
+            x = self.conv1(x, feat_cache[idx])
+            feat_cache[idx] = cache_x
+            feat_idx[0] += 1
+        else:
+            x = self.conv1(x)
+
         for layer in self.middle:
-            x = layer(x)
+            if isinstance(layer, ResidualBlock) and feat_cache is not None:
+                x = layer(x, feat_cache, feat_idx)
+            else:
+                x = layer(x)
+
         for layer in self.upsamples:
-            x = layer(x)
+            if feat_cache is not None:
+                x = layer(x, feat_cache, feat_idx)
+            else:
+                x = layer(x)
+
         for layer in self.head:
-            x = layer(x)
+            if isinstance(layer, CausalConv3d) and feat_cache is not None:
+                idx = feat_idx[0]
+                cache_x = x[:, :, -CACHE_T:, :, :].clone()
+                if cache_x.shape[2] < 2 and feat_cache[idx] is not None:
+                    cache_x = torch.cat([
+                        feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(
+                            cache_x.device), cache_x
+                    ],
+                                        dim=2)
+                x = layer(x, feat_cache[idx])
+                feat_cache[idx] = cache_x
+                feat_idx[0] += 1
+            else:
+                x = layer(x)
         return x
+
+
+def count_conv3d(model):
+    count = 0
+    for m in model.modules():
+        if isinstance(m, CausalConv3d):
+            count += 1
+    return count
 
 
 class AliceVAECore(nn.Module):
@@ -368,23 +467,54 @@ class AliceVAECore(nn.Module):
         return x_recon, mu, log_var
 
     def encode(self, x, scale):
-        out = self.encoder(x)
+        self.clear_cache()
+        t = x.shape[2]
+        iter_ = 1 + (t - 1) // 4
+        for i in range(iter_):
+            self._enc_conv_idx = [0]
+            if i == 0:
+                out = self.encoder(
+                    x[:, :, :1, :, :],
+                    feat_cache=self._enc_feat_map,
+                    feat_idx=self._enc_conv_idx)
+            else:
+                out_ = self.encoder(
+                    x[:, :, 1 + 4 * (i - 1):1 + 4 * i, :, :],
+                    feat_cache=self._enc_feat_map,
+                    feat_idx=self._enc_conv_idx)
+                out = torch.cat([out, out_], 2)
         mu, log_var = self.conv1(out).chunk(2, dim=1)
         if isinstance(scale[0], torch.Tensor):
             mu = (mu - scale[0].view(1, self.z_dim, 1, 1, 1)) * scale[1].view(
                 1, self.z_dim, 1, 1, 1)
         else:
             mu = (mu - scale[0]) * scale[1]
+        self.clear_cache()
         return mu
 
     def decode(self, z, scale):
+        self.clear_cache()
         if isinstance(scale[0], torch.Tensor):
             z = z / scale[1].view(1, self.z_dim, 1, 1, 1) + scale[0].view(
                 1, self.z_dim, 1, 1, 1)
         else:
             z = z / scale[1] + scale[0]
+        iter_ = z.shape[2]
         x = self.conv2(z)
-        out = self.decoder(x)
+        for i in range(iter_):
+            self._conv_idx = [0]
+            if i == 0:
+                out = self.decoder(
+                    x[:, :, i:i + 1, :, :],
+                    feat_cache=self._feat_map,
+                    feat_idx=self._conv_idx)
+            else:
+                out_ = self.decoder(
+                    x[:, :, i:i + 1, :, :],
+                    feat_cache=self._feat_map,
+                    feat_idx=self._conv_idx)
+                out = torch.cat([out, out_], 2)
+        self.clear_cache()
         return out
 
     def reparameterize(self, mu, log_var):
@@ -406,14 +536,6 @@ class AliceVAECore(nn.Module):
         self._enc_conv_num = count_conv3d(self.encoder)
         self._enc_conv_idx = [0]
         self._enc_feat_map = [None] * self._enc_conv_num
-
-
-def count_conv3d(model):
-    count = 0
-    for m in model.modules():
-        if isinstance(m, CausalConv3d):
-            count += 1
-    return count
 
 
 def _video_vae(pretrained_path=None, z_dim=None, device='cpu', **kwargs):
