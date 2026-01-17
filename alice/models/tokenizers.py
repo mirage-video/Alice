@@ -1,4 +1,5 @@
 import html
+import string
 
 import regex as re
 from transformers import AutoTokenizer
@@ -15,6 +16,19 @@ def whitespace_clean(text):
     text = re.sub(r'\s+', ' ', text)
     text = text.strip()
     return text
+
+
+def canonicalize(text, keep_punctuation_exact_string=None):
+    text = text.replace('_', ' ')
+    if keep_punctuation_exact_string:
+        text = keep_punctuation_exact_string.join(
+            part.translate(str.maketrans('', '', string.punctuation))
+            for part in text.split(keep_punctuation_exact_string))
+    else:
+        text = text.translate(str.maketrans('', '', string.punctuation))
+    text = text.lower()
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
 
 
 class HuggingfaceTokenizer:
@@ -42,9 +56,20 @@ class HuggingfaceTokenizer:
 
         if isinstance(sequence, str):
             sequence = [sequence]
+        if self.clean:
+            sequence = [self._clean(u) for u in sequence]
         ids = self.tokenizer(sequence, **_kwargs)
 
         if return_mask:
             return ids.input_ids, ids.attention_mask
         else:
             return ids.input_ids
+
+    def _clean(self, text):
+        if self.clean == 'whitespace':
+            text = whitespace_clean(basic_clean(text))
+        elif self.clean == 'lower':
+            text = whitespace_clean(basic_clean(text)).lower()
+        elif self.clean == 'canonicalize':
+            text = canonicalize(basic_clean(text))
+        return text
