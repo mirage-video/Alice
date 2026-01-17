@@ -19,6 +19,7 @@ dependencies = [
     "easydict",
     "einops",
     "imageio",
+    "transformers>=4.49.0",
 ]
 
 [tool.setuptools]
