@@ -20,6 +20,7 @@ dependencies = [
     "einops",
     "imageio",
     "transformers>=4.49.0",
+    "ftfy",
 ]
 
 [tool.setuptools]
