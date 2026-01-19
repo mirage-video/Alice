@@ -100,3 +100,36 @@ class T5FeedForward(nn.Module):
         x = self.fc2(x)
         x = self.dropout(x)
         return x
+
+
+class T5SelfAttention(nn.Module):
+
+    def __init__(self,
+                 dim,
+                 dim_attn,
+                 dim_ffn,
+                 num_heads,
+                 num_buckets,
+                 shared_pos=True,
+                 dropout=0.1):
+        super(T5SelfAttention, self).__init__()
+        self.dim = dim
+        self.dim_attn = dim_attn
+        self.dim_ffn = dim_ffn
+        self.num_heads = num_heads
+        self.num_buckets = num_buckets
+        self.shared_pos = shared_pos
+
+        self.norm1 = T5LayerNorm(dim)
+        self.attn = T5Attention(dim, dim_attn, num_heads, dropout)
+        self.norm2 = T5LayerNorm(dim)
+        self.ffn = T5FeedForward(dim, dim_ffn, dropout)
+        self.pos_embedding = None if shared_pos else T5RelativeEmbedding(
+            num_buckets, num_heads, bidirectional=True)
+
+    def forward(self, x, mask=None, pos_bias=None):
+        e = pos_bias if self.shared_pos else self.pos_embedding(
+            x.size(1), x.size(1))
+        x = x + self.attn(self.norm1(x), mask=mask, pos_bias=e)
+        x = x + self.ffn(self.norm2(x))
+        return x
