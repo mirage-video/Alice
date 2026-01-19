@@ -80,3 +80,23 @@ class T5Attention(nn.Module):
         x = self.o(x)
         x = self.dropout(x)
         return x
+
+
+class T5FeedForward(nn.Module):
+
+    def __init__(self, dim, dim_ffn, dropout=0.1):
+        super(T5FeedForward, self).__init__()
+        self.dim = dim
+        self.dim_ffn = dim_ffn
+
+        self.gate = nn.Sequential(nn.Linear(dim, dim_ffn, bias=False), GELU())
+        self.fc1 = nn.Linear(dim, dim_ffn, bias=False)
+        self.fc2 = nn.Linear(dim_ffn, dim, bias=False)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        x = self.fc1(x) * self.gate(x)
+        x = self.dropout(x)
+        x = self.fc2(x)
+        x = self.dropout(x)
+        return x
