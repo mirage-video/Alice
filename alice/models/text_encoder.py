@@ -175,3 +175,44 @@ class T5CrossAttention(nn.Module):
             self.norm2(x), context=encoder_states, mask=encoder_mask)
         x = x + self.ffn(self.norm3(x))
         return x
+
+
+class T5RelativeEmbedding(nn.Module):
+
+    def __init__(self, num_buckets, num_heads, bidirectional, max_dist=128):
+        super(T5RelativeEmbedding, self).__init__()
+        self.num_buckets = num_buckets
+        self.num_heads = num_heads
+        self.bidirectional = bidirectional
+        self.max_dist = max_dist
+
+        self.embedding = nn.Embedding(num_buckets, num_heads)
+
+    def forward(self, lq, lk):
+        device = self.embedding.weight.device
+        rel_pos = torch.arange(lk, device=device).unsqueeze(0) - \
+            torch.arange(lq, device=device).unsqueeze(1)
+        rel_pos = self._relative_position_bucket(rel_pos)
+        rel_pos_embeds = self.embedding(rel_pos)
+        rel_pos_embeds = rel_pos_embeds.permute(2, 0, 1).unsqueeze(
+            0)  # [1, N, Lq, Lk]
+        return rel_pos_embeds.contiguous()
+
+    def _relative_position_bucket(self, rel_pos):
+        if self.bidirectional:
+            num_buckets = self.num_buckets // 2
+            rel_buckets = (rel_pos > 0).long() * num_buckets
+            rel_pos = torch.abs(rel_pos)
+        else:
+            num_buckets = self.num_buckets
+            rel_buckets = 0
+            rel_pos = -torch.min(rel_pos, torch.zeros_like(rel_pos))
+
+        max_exact = num_buckets // 2
+        rel_pos_large = max_exact + (torch.log(rel_pos.float() / max_exact) /
+                                     math.log(self.max_dist / max_exact) *
+                                     (num_buckets - max_exact)).long()
+        rel_pos_large = torch.min(
+            rel_pos_large, torch.full_like(rel_pos_large, num_buckets - 1))
+        rel_buckets += torch.where(rel_pos < max_exact, rel_pos, rel_pos_large)
+        return rel_buckets
