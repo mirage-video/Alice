@@ -311,3 +311,42 @@ class T5Decoder(nn.Module):
         x = self.norm(x)
         x = self.dropout(x)
         return x
+
+
+class T5Model(nn.Module):
+
+    def __init__(self,
+                 vocab_size,
+                 dim,
+                 dim_attn,
+                 dim_ffn,
+                 num_heads,
+                 encoder_layers,
+                 decoder_layers,
+                 num_buckets,
+                 shared_pos=True,
+                 dropout=0.1):
+        super(T5Model, self).__init__()
+        self.vocab_size = vocab_size
+        self.dim = dim
+        self.dim_attn = dim_attn
+        self.dim_ffn = dim_ffn
+        self.num_heads = num_heads
+        self.encoder_layers = encoder_layers
+        self.decoder_layers = decoder_layers
+        self.num_buckets = num_buckets
+
+        self.token_embedding = nn.Embedding(vocab_size, dim)
+        self.encoder = T5Encoder(self.token_embedding, dim, dim_attn, dim_ffn,
+                                 num_heads, encoder_layers, num_buckets,
+                                 shared_pos, dropout)
+        self.decoder = T5Decoder(self.token_embedding, dim, dim_attn, dim_ffn,
+                                 num_heads, decoder_layers, num_buckets,
+                                 shared_pos, dropout)
+        self.head = nn.Linear(dim, vocab_size, bias=False)
+
+    def forward(self, encoder_ids, encoder_mask, decoder_ids, decoder_mask):
+        x = self.encoder(encoder_ids, encoder_mask)
+        x = self.decoder(decoder_ids, decoder_mask, x, encoder_mask)
+        x = self.head(x)
+        return x
