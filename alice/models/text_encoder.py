@@ -260,3 +260,54 @@ class T5Encoder(nn.Module):
         x = self.norm(x)
         x = self.dropout(x)
         return x
+
+
+class T5Decoder(nn.Module):
+
+    def __init__(self,
+                 vocab,
+                 dim,
+                 dim_attn,
+                 dim_ffn,
+                 num_heads,
+                 num_layers,
+                 num_buckets,
+                 shared_pos=True,
+                 dropout=0.1):
+        super(T5Decoder, self).__init__()
+        self.dim = dim
+        self.dim_attn = dim_attn
+        self.dim_ffn = dim_ffn
+        self.num_heads = num_heads
+        self.num_layers = num_layers
+        self.num_buckets = num_buckets
+        self.shared_pos = shared_pos
+
+        self.token_embedding = vocab if isinstance(vocab, nn.Embedding) \
+            else nn.Embedding(vocab, dim)
+        self.pos_embedding = T5RelativeEmbedding(
+            num_buckets, num_heads, bidirectional=False) if shared_pos else None
+        self.dropout = nn.Dropout(dropout)
+        self.blocks = nn.ModuleList([
+            T5CrossAttention(dim, dim_attn, dim_ffn, num_heads, num_buckets,
+                             shared_pos, dropout) for _ in range(num_layers)
+        ])
+        self.norm = T5LayerNorm(dim)
+
+    def forward(self, ids, mask=None, encoder_states=None, encoder_mask=None):
+        b, s = ids.size()
+
+        if mask is None:
+            mask = torch.tril(torch.ones(1, s, s).to(ids.device))
+        elif mask.ndim == 2:
+            mask = torch.tril(mask.unsqueeze(1).expand(-1, s, -1))
+
+        x = self.token_embedding(ids)
+        x = self.dropout(x)
+        e = self.pos_embedding(x.size(1),
+                               x.size(1)) if self.shared_pos else None
+        for block in self.blocks:
+            x = block(x, mask, encoder_states, encoder_mask, pos_bias=e)
+        x = self.norm(x)
+        x = self.dropout(x)
+        return x
