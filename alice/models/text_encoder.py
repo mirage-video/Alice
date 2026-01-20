@@ -216,3 +216,47 @@ class T5RelativeEmbedding(nn.Module):
             rel_pos_large, torch.full_like(rel_pos_large, num_buckets - 1))
         rel_buckets += torch.where(rel_pos < max_exact, rel_pos, rel_pos_large)
         return rel_buckets
+
+
+class T5Encoder(nn.Module):
+
+    def __init__(self,
+                 vocab,
+                 dim,
+                 dim_attn,
+                 dim_ffn,
+                 num_heads,
+                 num_layers,
+                 num_buckets,
+                 shared_pos=True,
+                 dropout=0.1):
+        super(T5Encoder, self).__init__()
+        self.dim = dim
+        self.dim_attn = dim_attn
+        self.dim_ffn = dim_ffn
+        self.num_heads = num_heads
+        self.num_layers = num_layers
+        self.num_buckets = num_buckets
+        self.shared_pos = shared_pos
+
+        self.token_embedding = vocab if isinstance(vocab, nn.Embedding) \
+            else nn.Embedding(vocab, dim)
+        self.pos_embedding = T5RelativeEmbedding(
+            num_buckets, num_heads, bidirectional=True) if shared_pos else None
+        self.dropout = nn.Dropout(dropout)
+        self.blocks = nn.ModuleList([
+            T5SelfAttention(dim, dim_attn, dim_ffn, num_heads, num_buckets,
+                            shared_pos, dropout) for _ in range(num_layers)
+        ])
+        self.norm = T5LayerNorm(dim)
+
+    def forward(self, ids, mask=None):
+        x = self.token_embedding(ids)
+        x = self.dropout(x)
+        e = self.pos_embedding(x.size(1),
+                               x.size(1)) if self.shared_pos else None
+        for block in self.blocks:
+            x = block(x, mask, pos_bias=e)
+        x = self.norm(x)
+        x = self.dropout(x)
+        return x
