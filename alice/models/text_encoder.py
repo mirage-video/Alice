@@ -352,6 +352,42 @@ class T5Model(nn.Module):
         return x
 
 
+def _t5(name,
+        encoder_only=False,
+        decoder_only=False,
+        return_tokenizer=False,
+        tokenizer_kwargs={},
+        dtype=torch.float32,
+        device='cpu',
+        **kwargs):
+    assert not (encoder_only and decoder_only)
+
+    if encoder_only:
+        model_cls = T5Encoder
+        kwargs['vocab'] = kwargs.pop('vocab_size')
+        kwargs['num_layers'] = kwargs.pop('encoder_layers')
+        _ = kwargs.pop('decoder_layers')
+    elif decoder_only:
+        model_cls = T5Decoder
+        kwargs['vocab'] = kwargs.pop('vocab_size')
+        kwargs['num_layers'] = kwargs.pop('decoder_layers')
+        _ = kwargs.pop('encoder_layers')
+    else:
+        model_cls = T5Model
+
+    with torch.device(device):
+        model = model_cls(**kwargs)
+
+    model = model.to(dtype=dtype, device=device)
+
+    if return_tokenizer:
+        from .tokenizers import HuggingfaceTokenizer
+        tokenizer = HuggingfaceTokenizer(f'google/{name}', **tokenizer_kwargs)
+        return model, tokenizer
+    else:
+        return model
+
+
 def umt5_xxl(**kwargs):
     cfg = dict(
         vocab_size=256384,
