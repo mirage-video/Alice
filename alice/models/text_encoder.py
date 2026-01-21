@@ -15,6 +15,25 @@ __all__ = [
 ]
 
 
+def init_weights(m):
+    if isinstance(m, T5LayerNorm):
+        nn.init.ones_(m.weight)
+    elif isinstance(m, T5Model):
+        nn.init.normal_(m.token_embedding.weight, std=1.0)
+    elif isinstance(m, T5FeedForward):
+        nn.init.normal_(m.gate[0].weight, std=m.dim**-0.5)
+        nn.init.normal_(m.fc1.weight, std=m.dim**-0.5)
+        nn.init.normal_(m.fc2.weight, std=m.dim_ffn**-0.5)
+    elif isinstance(m, T5Attention):
+        nn.init.normal_(m.q.weight, std=(m.dim * m.dim_attn)**-0.5)
+        nn.init.normal_(m.k.weight, std=m.dim**-0.5)
+        nn.init.normal_(m.v.weight, std=m.dim**-0.5)
+        nn.init.normal_(m.o.weight, std=(m.num_heads * m.dim_attn)**-0.5)
+    elif isinstance(m, T5RelativeEmbedding):
+        nn.init.normal_(
+            m.embedding.weight, std=(2 * m.num_buckets * m.num_heads)**-0.5)
+
+
 class GELU(nn.Module):
 
     def forward(self, x):
@@ -250,6 +269,8 @@ class T5Encoder(nn.Module):
         ])
         self.norm = T5LayerNorm(dim)
 
+        self.apply(init_weights)
+
     def forward(self, ids, mask=None):
         x = self.token_embedding(ids)
         x = self.dropout(x)
@@ -293,6 +314,8 @@ class T5Decoder(nn.Module):
                              shared_pos, dropout) for _ in range(num_layers)
         ])
         self.norm = T5LayerNorm(dim)
+
+        self.apply(init_weights)
 
     def forward(self, ids, mask=None, encoder_states=None, encoder_mask=None):
         b, s = ids.size()
@@ -344,6 +367,8 @@ class T5Model(nn.Module):
                                  num_heads, decoder_layers, num_buckets,
                                  shared_pos, dropout)
         self.head = nn.Linear(dim, vocab_size, bias=False)
+
+        self.apply(init_weights)
 
     def forward(self, encoder_ids, encoder_mask, decoder_ids, decoder_mask):
         x = self.encoder(encoder_ids, encoder_mask)
