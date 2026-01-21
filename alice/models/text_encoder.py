@@ -350,3 +350,19 @@ class T5Model(nn.Module):
         x = self.decoder(decoder_ids, decoder_mask, x, encoder_mask)
         x = self.head(x)
         return x
+
+
+def umt5_xxl(**kwargs):
+    cfg = dict(
+        vocab_size=256384,
+        dim=4096,
+        dim_attn=4096,
+        dim_ffn=10240,
+        num_heads=64,
+        encoder_layers=24,
+        decoder_layers=24,
+        num_buckets=32,
+        shared_pos=False,
+        dropout=0.1)
+    cfg.update(**kwargs)
+    return _t5('umt5-xxl', **cfg)
