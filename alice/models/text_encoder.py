@@ -402,3 +402,45 @@ def umt5_xxl(**kwargs):
         dropout=0.1)
     cfg.update(**kwargs)
     return _t5('umt5-xxl', **cfg)
+
+
+class T5EncoderModel:
+
+    def __init__(
+        self,
+        text_len,
+        dtype=torch.bfloat16,
+        device=None,
+        checkpoint_path=None,
+        tokenizer_path=None,
+        shard_fn=None,
+    ):
+        self.text_len = text_len
+        self.dtype = dtype
+        self.device = device if device is not None else torch.cuda.current_device()
+        self.checkpoint_path = checkpoint_path
+        self.tokenizer_path = tokenizer_path
+
+        model = umt5_xxl(
+            encoder_only=True,
+            return_tokenizer=False,
+            dtype=dtype,
+            device=device).eval().requires_grad_(False)
+        logging.info(f'loading {checkpoint_path}')
+        model.load_state_dict(torch.load(checkpoint_path, map_location='cpu'))
+        self.model = model
+        if shard_fn is not None:
+            self.model = shard_fn(self.model, sync_module_states=False)
+        else:
+            self.model.to(self.device)
+        self.tokenizer = HuggingfaceTokenizer(
+            name=tokenizer_path, seq_len=text_len, clean='whitespace')
+
+    def __call__(self, texts, device):
+        ids, mask = self.tokenizer(
+            texts, return_mask=True, add_special_tokens=True)
+        ids = ids.to(device)
+        mask = mask.to(device)
+        seq_lens = mask.gt(0).sum(dim=1).long()
+        context = self.model(ids, mask)
+        return [u[:v] for u, v in zip(context, seq_lens)]
