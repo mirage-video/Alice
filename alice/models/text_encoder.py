@@ -15,6 +15,13 @@ __all__ = [
 ]
 
 
+def fp16_clamp(x):
+    if x.dtype == torch.float16 and torch.isinf(x).any():
+        clamp = torch.finfo(x.dtype).max - 1000
+        x = torch.clamp(x, min=-clamp, max=clamp)
+    return x
+
+
 def init_weights(m):
     if isinstance(m, T5LayerNorm):
         nn.init.ones_(m.weight)
@@ -149,8 +156,8 @@ class T5SelfAttention(nn.Module):
     def forward(self, x, mask=None, pos_bias=None):
         e = pos_bias if self.shared_pos else self.pos_embedding(
             x.size(1), x.size(1))
-        x = x + self.attn(self.norm1(x), mask=mask, pos_bias=e)
-        x = x + self.ffn(self.norm2(x))
+        x = fp16_clamp(x + self.attn(self.norm1(x), mask=mask, pos_bias=e))
+        x = fp16_clamp(x + self.ffn(self.norm2(x)))
         return x
 
 
@@ -189,10 +196,10 @@ class T5CrossAttention(nn.Module):
                 pos_bias=None):
         e = pos_bias if self.shared_pos else self.pos_embedding(
             x.size(1), x.size(1))
-        x = x + self.self_attn(self.norm1(x), mask=mask, pos_bias=e)
-        x = x + self.cross_attn(
-            self.norm2(x), context=encoder_states, mask=encoder_mask)
-        x = x + self.ffn(self.norm3(x))
+        x = fp16_clamp(x + self.self_attn(self.norm1(x), mask=mask, pos_bias=e))
+        x = fp16_clamp(x + self.cross_attn(
+            self.norm2(x), context=encoder_states, mask=encoder_mask))
+        x = fp16_clamp(x + self.ffn(self.norm3(x)))
         return x
 
 
