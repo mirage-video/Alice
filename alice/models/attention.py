@@ -25,27 +25,31 @@ def flash_attention(
     dtype=torch.bfloat16,
 ):
     """Flash attention with variable-length sequences. q/k/v: [B, L, N, C]."""
+    half_dtypes = (torch.float16, torch.bfloat16)
     assert q.device.type == 'cuda' and q.size(-1) <= 256
 
     b, lq, lk = q.size(0), q.size(1), k.size(1)
 
+    def half(x):
+        return x if x.dtype in half_dtypes else x.to(dtype)
+
     if q_lens is None:
-        q = q.flatten(0, 1)
+        q = half(q.flatten(0, 1))
         q_lens = torch.tensor(
             [lq] * b, dtype=torch.int32).to(
                 device=q.device, non_blocking=True)
     else:
-        q = torch.cat([u[:v] for u, v in zip(q, q_lens)])
+        q = half(torch.cat([u[:v] for u, v in zip(q, q_lens)]))
 
     if k_lens is None:
-        k = k.flatten(0, 1)
-        v = v.flatten(0, 1)
+        k = half(k.flatten(0, 1))
+        v = half(v.flatten(0, 1))
         k_lens = torch.tensor(
             [lk] * b, dtype=torch.int32).to(
                 device=k.device, non_blocking=True)
     else:
-        k = torch.cat([u[:v] for u, v in zip(k, k_lens)])
-        v = torch.cat([u[:v] for u, v in zip(v, k_lens)])
+        k = half(torch.cat([u[:v] for u, v in zip(k, k_lens)]))
+        v = half(torch.cat([u[:v] for u, v in zip(v, k_lens)]))
 
     if FLASH_ATTN_3_AVAILABLE:
         x = flash_attn_interface.flash_attn_varlen_func(
