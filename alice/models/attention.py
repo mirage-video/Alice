@@ -13,3 +13,54 @@ except ModuleNotFoundError:
     FLASH_ATTN_2_AVAILABLE = False
 
 __all__ = []
+
+
+def flash_attention(
+    q,
+    k,
+    v,
+    q_lens=None,
+    k_lens=None,
+    dropout_p=0.,
+    dtype=torch.bfloat16,
+):
+    """Flash attention with variable-length sequences. q/k/v: [B, L, N, C]."""
+    assert q.device.type == 'cuda' and q.size(-1) <= 256
+
+    b, lq, lk = q.size(0), q.size(1), k.size(1)
+
+    if q_lens is None:
+        q = q.flatten(0, 1)
+        q_lens = torch.tensor(
+            [lq] * b, dtype=torch.int32).to(
+                device=q.device, non_blocking=True)
+    else:
+        q = torch.cat([u[:v] for u, v in zip(q, q_lens)])
+
+    if k_lens is None:
+        k = k.flatten(0, 1)
+        v = v.flatten(0, 1)
+        k_lens = torch.tensor(
+            [lk] * b, dtype=torch.int32).to(
+                device=k.device, non_blocking=True)
+    else:
+        k = torch.cat([u[:v] for u, v in zip(k, k_lens)])
+        v = torch.cat([u[:v] for u, v in zip(v, k_lens)])
+
+    if FLASH_ATTN_3_AVAILABLE:
+        x = flash_attn_interface.flash_attn_varlen_func(
+            q=q,
+            k=k,
+            v=v,
+            cu_seqlens_q=torch.cat([q_lens.new_zeros([1]), q_lens]).cumsum(
+                0, dtype=torch.int32).to(q.device, non_blocking=True),
+            cu_seqlens_k=torch.cat([k_lens.new_zeros([1]), k_lens]).cumsum(
+                0, dtype=torch.int32).to(q.device, non_blocking=True),
+            seqused_q=None,
+            seqused_k=None,
+            max_seqlen_q=lq,
+            max_seqlen_k=lk)[0].unflatten(0, (b, lq))
+    else:
+        x = q  # placeholder for flash_attn_2
+
+    return x
