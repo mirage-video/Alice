@@ -22,6 +22,9 @@ def flash_attention(
     q_lens=None,
     k_lens=None,
     dropout_p=0.,
+    softmax_scale=None,
+    causal=False,
+    deterministic=False,
     dtype=torch.bfloat16,
 ):
     """Flash attention with variable-length sequences. q/k/v: [B, L, N, C]."""
@@ -66,7 +69,10 @@ def flash_attention(
             seqused_q=None,
             seqused_k=None,
             max_seqlen_q=lq,
-            max_seqlen_k=lk)[0].unflatten(0, (b, lq))
+            max_seqlen_k=lk,
+            softmax_scale=softmax_scale,
+            causal=causal,
+            deterministic=deterministic)[0].unflatten(0, (b, lq))
     else:
         x = q  # placeholder for flash_attn_2
 
