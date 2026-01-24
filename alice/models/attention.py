@@ -74,6 +74,20 @@ def flash_attention(
             causal=causal,
             deterministic=deterministic)[0].unflatten(0, (b, lq))
     else:
-        x = q  # placeholder for flash_attn_2
+        assert FLASH_ATTN_2_AVAILABLE
+        x = flash_attn.flash_attn_varlen_func(
+            q=q,
+            k=k,
+            v=v,
+            cu_seqlens_q=torch.cat([q_lens.new_zeros([1]), q_lens]).cumsum(
+                0, dtype=torch.int32).to(q.device, non_blocking=True),
+            cu_seqlens_k=torch.cat([k_lens.new_zeros([1]), k_lens]).cumsum(
+                0, dtype=torch.int32).to(q.device, non_blocking=True),
+            max_seqlen_q=lq,
+            max_seqlen_k=lk,
+            dropout_p=dropout_p,
+            softmax_scale=softmax_scale,
+            causal=causal,
+            deterministic=deterministic).unflatten(0, (b, lq))
 
     return x
