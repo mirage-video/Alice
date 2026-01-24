@@ -29,6 +29,7 @@ def flash_attention(
 ):
     """Flash attention with variable-length sequences. q/k/v: [B, L, N, C]."""
     half_dtypes = (torch.float16, torch.bfloat16)
+    assert dtype in half_dtypes
     assert q.device.type == 'cuda' and q.size(-1) <= 256
 
     b, lq, lk, out_dtype = q.size(0), q.size(1), k.size(1), q.dtype
