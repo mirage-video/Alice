@@ -28,7 +28,7 @@ def flash_attention(
     half_dtypes = (torch.float16, torch.bfloat16)
     assert q.device.type == 'cuda' and q.size(-1) <= 256
 
-    b, lq, lk = q.size(0), q.size(1), k.size(1)
+    b, lq, lk, out_dtype = q.size(0), q.size(1), k.size(1), q.dtype
 
     def half(x):
         return x if x.dtype in half_dtypes else x.to(dtype)
@@ -50,6 +50,9 @@ def flash_attention(
     else:
         k = half(torch.cat([u[:v] for u, v in zip(k, k_lens)]))
         v = half(torch.cat([u[:v] for u, v in zip(v, k_lens)]))
+
+    q = q.to(v.dtype)
+    k = k.to(v.dtype)
 
     if FLASH_ATTN_3_AVAILABLE:
         x = flash_attn_interface.flash_attn_varlen_func(
