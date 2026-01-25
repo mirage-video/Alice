@@ -98,3 +98,43 @@ def flash_attention(
             deterministic=deterministic).unflatten(0, (b, lq))
 
     return x
+
+
+def attention(
+    q,
+    k,
+    v,
+    q_lens=None,
+    k_lens=None,
+    softmax_scale=None,
+    q_scale=None,
+    causal=False,
+    window_size=(-1, -1),
+    deterministic=False,
+    dtype=torch.bfloat16,
+):
+    if FLASH_ATTN_2_AVAILABLE or FLASH_ATTN_3_AVAILABLE:
+        return flash_attention(
+            q=q,
+            k=k,
+            v=v,
+            q_lens=q_lens,
+            k_lens=k_lens,
+            softmax_scale=softmax_scale,
+            q_scale=q_scale,
+            causal=causal,
+            window_size=window_size,
+            deterministic=deterministic,
+            dtype=dtype,
+        )
+    else:
+        # SDPA fallback
+        q = q.transpose(1, 2).to(dtype)
+        k = k.transpose(1, 2).to(dtype)
+        v = v.transpose(1, 2).to(dtype)
+
+        out = torch.nn.functional.scaled_dot_product_attention(
+            q, k, v, is_causal=causal)
+
+        out = out.transpose(1, 2).contiguous()
+        return out
