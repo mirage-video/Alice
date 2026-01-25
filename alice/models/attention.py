@@ -106,6 +106,7 @@ def attention(
     v,
     q_lens=None,
     k_lens=None,
+    dropout_p=0.,
     softmax_scale=None,
     q_scale=None,
     causal=False,
@@ -120,6 +121,7 @@ def attention(
             v=v,
             q_lens=q_lens,
             k_lens=k_lens,
+            dropout_p=dropout_p,
             softmax_scale=softmax_scale,
             q_scale=q_scale,
             causal=causal,
@@ -134,7 +136,7 @@ def attention(
         v = v.transpose(1, 2).to(dtype)
 
         out = torch.nn.functional.scaled_dot_product_attention(
-            q, k, v, is_causal=causal)
+            q, k, v, is_causal=causal, dropout_p=dropout_p)
 
         out = out.transpose(1, 2).contiguous()
         return out
