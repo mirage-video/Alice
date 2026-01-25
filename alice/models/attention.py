@@ -25,6 +25,7 @@ def flash_attention(
     softmax_scale=None,
     q_scale=None,
     causal=False,
+    window_size=(-1, -1),
     deterministic=False,
     dtype=torch.bfloat16,
 ):
@@ -93,6 +94,7 @@ def flash_attention(
             dropout_p=dropout_p,
             softmax_scale=softmax_scale,
             causal=causal,
+            window_size=window_size,
             deterministic=deterministic).unflatten(0, (b, lq))
 
     return x
