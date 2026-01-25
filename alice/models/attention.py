@@ -23,6 +23,7 @@ def flash_attention(
     k_lens=None,
     dropout_p=0.,
     softmax_scale=None,
+    q_scale=None,
     causal=False,
     deterministic=False,
     dtype=torch.bfloat16,
@@ -57,6 +58,9 @@ def flash_attention(
 
     q = q.to(v.dtype)
     k = k.to(v.dtype)
+
+    if q_scale is not None:
+        q = q * q_scale
 
     if FLASH_ATTN_3_AVAILABLE:
         x = flash_attn_interface.flash_attn_varlen_func(
