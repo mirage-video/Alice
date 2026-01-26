@@ -105,7 +105,7 @@ def flash_attention(
             window_size=window_size,
             deterministic=deterministic).unflatten(0, (b, lq))
 
-    return x
+    return x.type(out_dtype)
 
 
 def attention(
