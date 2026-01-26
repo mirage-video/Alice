@@ -12,6 +12,8 @@ try:
 except ModuleNotFoundError:
     FLASH_ATTN_2_AVAILABLE = False
 
+import warnings
+
 __all__ = []
 
 
@@ -130,7 +132,10 @@ def attention(
             dtype=dtype,
         )
     else:
-        # SDPA fallback (deterministic mode not supported)
+        if q_lens is not None or k_lens is not None:
+            warnings.warn(
+                'Padding mask is disabled when using scaled_dot_product_attention. It can have a significant impact on performance.'
+            )
         attn_mask = None
 
         q = q.transpose(1, 2).to(dtype)
