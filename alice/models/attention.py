@@ -30,6 +30,7 @@ def flash_attention(
     window_size=(-1, -1),
     deterministic=False,
     dtype=torch.bfloat16,
+    version=None,
 ):
     """Flash attention with variable-length sequences. q/k/v: [B, L, N, C]."""
     half_dtypes = (torch.float16, torch.bfloat16)
@@ -65,7 +66,12 @@ def flash_attention(
     if q_scale is not None:
         q = q * q_scale
 
-    if FLASH_ATTN_3_AVAILABLE:
+    if version is not None and version == 3 and not FLASH_ATTN_3_AVAILABLE:
+        warnings.warn(
+            'Flash attention 3 is not available, use flash attention 2 instead.'
+        )
+
+    if (version is None or version == 3) and FLASH_ATTN_3_AVAILABLE:
         x = flash_attn_interface.flash_attn_varlen_func(
             q=q,
             k=k,
