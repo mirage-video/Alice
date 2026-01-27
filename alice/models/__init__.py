@@ -1,3 +1,4 @@
+from .attention import attention, flash_attention
 from .text_encoder import T5Decoder, T5Encoder, T5EncoderModel, T5Model
 from .tokenizers import HuggingfaceTokenizer
 from .vae import AliceVAE
@@ -11,4 +12,6 @@ __all__ = [
     'T5Decoder',
     'T5EncoderModel',
     'HuggingfaceTokenizer',
+    'flash_attention',
+    'attention',
 ]
