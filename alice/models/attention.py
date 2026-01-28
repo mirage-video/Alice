@@ -124,6 +124,7 @@ def attention(
     window_size=(-1, -1),
     deterministic=False,
     dtype=torch.bfloat16,
+    fa_version=None,
 ):
     if FLASH_ATTN_2_AVAILABLE or FLASH_ATTN_3_AVAILABLE:
         return flash_attention(
