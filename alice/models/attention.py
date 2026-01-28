@@ -140,6 +140,7 @@ def attention(
             window_size=window_size,
             deterministic=deterministic,
             dtype=dtype,
+            version=fa_version,
         )
     else:
         if q_lens is not None or k_lens is not None:
