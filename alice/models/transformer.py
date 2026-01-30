@@ -54,3 +54,19 @@ def rope_apply(x, grid_sizes, freqs):
 
         output.append(x_i)
     return torch.stack(output).float()
+
+
+class RMSNorm(nn.Module):
+
+    def __init__(self, dim, eps=1e-5):
+        super().__init__()
+        self.dim = dim
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(dim))
+
+    def forward(self, x):
+        """Apply RMS normalization. Input shape: [B, L, C]."""
+        return self._norm(x.float()).type_as(x) * self.weight
+
+    def _norm(self, x):
+        return x * torch.rsqrt(x.pow(2).mean(dim=-1, keepdim=True) + self.eps)
