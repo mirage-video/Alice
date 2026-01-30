@@ -80,3 +80,45 @@ class LayerNorm(nn.LayerNorm):
     def forward(self, x):
         """Apply layer normalization. Input shape: [B, L, C]."""
         return super().forward(x.float()).type_as(x)
+
+
+class SelfAttention(nn.Module):
+
+    def __init__(self,
+                 dim,
+                 num_heads,
+                 window_size=(-1, -1),
+                 qk_norm=True,
+                 eps=1e-6):
+        assert dim % num_heads == 0
+        super().__init__()
+        self.dim = dim
+        self.num_heads = num_heads
+        self.head_dim = dim // num_heads
+        self.window_size = window_size
+        self.qk_norm = qk_norm
+        self.eps = eps
+
+        self.q = nn.Linear(dim, dim)
+        self.k = nn.Linear(dim, dim)
+        self.v = nn.Linear(dim, dim)
+        self.o = nn.Linear(dim, dim)
+
+    def forward(self, x, seq_lens, grid_sizes, freqs):
+        """Self-attention with rotary embeddings. x: [B, L, num_heads, head_dim]."""
+        b, s, n, d = *x.shape[:2], self.num_heads, self.head_dim
+
+        q = self.q(x).view(b, s, n, d)
+        k = self.k(x).view(b, s, n, d)
+        v = self.v(x).view(b, s, n, d)
+
+        x = flash_attention(
+            q=rope_apply(q, grid_sizes, freqs),
+            k=rope_apply(k, grid_sizes, freqs),
+            v=v,
+            k_lens=seq_lens,
+            window_size=self.window_size)
+
+        x = x.flatten(2)
+        x = self.o(x)
+        return x
