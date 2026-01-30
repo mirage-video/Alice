@@ -103,14 +103,20 @@ class SelfAttention(nn.Module):
         self.k = nn.Linear(dim, dim)
         self.v = nn.Linear(dim, dim)
         self.o = nn.Linear(dim, dim)
+        self.norm_q = RMSNorm(dim, eps=eps) if qk_norm else nn.Identity()
+        self.norm_k = RMSNorm(dim, eps=eps) if qk_norm else nn.Identity()
 
     def forward(self, x, seq_lens, grid_sizes, freqs):
         """Self-attention with rotary embeddings. x: [B, L, num_heads, head_dim]."""
         b, s, n, d = *x.shape[:2], self.num_heads, self.head_dim
 
-        q = self.q(x).view(b, s, n, d)
-        k = self.k(x).view(b, s, n, d)
-        v = self.v(x).view(b, s, n, d)
+        def qkv_fn(x):
+            q = self.norm_q(self.q(x)).view(b, s, n, d)
+            k = self.norm_k(self.k(x)).view(b, s, n, d)
+            v = self.v(x).view(b, s, n, d)
+            return q, k, v
+
+        q, k, v = qkv_fn(x)
 
         x = flash_attention(
             q=rope_apply(q, grid_sizes, freqs),
