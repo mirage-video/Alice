@@ -70,3 +70,13 @@ class RMSNorm(nn.Module):
 
     def _norm(self, x):
         return x * torch.rsqrt(x.pow(2).mean(dim=-1, keepdim=True) + self.eps)
+
+
+class LayerNorm(nn.LayerNorm):
+
+    def __init__(self, dim, eps=1e-6, elementwise_affine=False):
+        super().__init__(dim, elementwise_affine=elementwise_affine, eps=eps)
+
+    def forward(self, x):
+        """Apply layer normalization. Input shape: [B, L, C]."""
+        return super().forward(x.float()).type_as(x)
