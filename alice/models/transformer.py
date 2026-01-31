@@ -192,10 +192,24 @@ class AttentionBlock(nn.Module):
         context_lens,
     ):
         """Transformer block with self-attention, cross-attention, and FFN."""
-        y = self.self_attn(self.norm1(x), seq_lens, grid_sizes, freqs)
-        x = x + y
+        assert e.dtype == torch.float32
+        with torch.amp.autocast('cuda', dtype=torch.float32):
+            e = (self.modulation.unsqueeze(0) + e).chunk(6, dim=2)
+        assert e[0].dtype == torch.float32
 
-        x = x + self.cross_attn(self.norm3(x), context, context_lens)
-        y = self.ffn(self.norm2(x))
-        x = x + y
+        y = self.self_attn(
+            self.norm1(x).float() * (1 + e[1].squeeze(2)) + e[0].squeeze(2),
+            seq_lens, grid_sizes, freqs)
+        with torch.amp.autocast('cuda', dtype=torch.float32):
+            x = x + y * e[2].squeeze(2)
+
+        def cross_attn_ffn(x, context, context_lens, e):
+            x = x + self.cross_attn(self.norm3(x), context, context_lens)
+            y = self.ffn(
+                self.norm2(x).float() * (1 + e[4].squeeze(2)) + e[3].squeeze(2))
+            with torch.amp.autocast('cuda', dtype=torch.float32):
+                x = x + y * e[5].squeeze(2)
+            return x
+
+        x = cross_attn_ffn(x, context, context_lens, e)
         return x
