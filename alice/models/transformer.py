@@ -179,6 +179,8 @@ class AttentionBlock(nn.Module):
             nn.Linear(dim, ffn_dim), nn.GELU(approximate='tanh'),
             nn.Linear(ffn_dim, dim))
 
+        self.modulation = nn.Parameter(torch.randn(1, 6, dim) / dim**0.5)
+
     def forward(
         self,
         x,
