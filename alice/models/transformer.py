@@ -145,3 +145,55 @@ class CrossAttention(SelfAttention):
         x = x.flatten(2)
         x = self.o(x)
         return x
+
+
+class AttentionBlock(nn.Module):
+
+    def __init__(self,
+                 dim,
+                 ffn_dim,
+                 num_heads,
+                 window_size=(-1, -1),
+                 qk_norm=True,
+                 cross_attn_norm=False,
+                 eps=1e-6):
+        super().__init__()
+        self.dim = dim
+        self.ffn_dim = ffn_dim
+        self.num_heads = num_heads
+        self.window_size = window_size
+        self.qk_norm = qk_norm
+        self.cross_attn_norm = cross_attn_norm
+        self.eps = eps
+
+        self.norm1 = LayerNorm(dim, eps)
+        self.self_attn = SelfAttention(dim, num_heads, window_size, qk_norm,
+                                          eps)
+        self.norm3 = LayerNorm(
+            dim, eps,
+            elementwise_affine=True) if cross_attn_norm else nn.Identity()
+        self.cross_attn = CrossAttention(dim, num_heads, (-1, -1), qk_norm,
+                                            eps)
+        self.norm2 = LayerNorm(dim, eps)
+        self.ffn = nn.Sequential(
+            nn.Linear(dim, ffn_dim), nn.GELU(approximate='tanh'),
+            nn.Linear(ffn_dim, dim))
+
+    def forward(
+        self,
+        x,
+        e,
+        seq_lens,
+        grid_sizes,
+        freqs,
+        context,
+        context_lens,
+    ):
+        """Transformer block with self-attention, cross-attention, and FFN."""
+        y = self.self_attn(self.norm1(x), seq_lens, grid_sizes, freqs)
+        x = x + y
+
+        x = x + self.cross_attn(self.norm3(x), context, context_lens)
+        y = self.ffn(self.norm2(x))
+        x = x + y
+        return x
