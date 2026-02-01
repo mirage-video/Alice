@@ -213,3 +213,29 @@ class AttentionBlock(nn.Module):
 
         x = cross_attn_ffn(x, context, context_lens, e)
         return x
+
+
+class Head(nn.Module):
+
+    def __init__(self, dim, out_dim, patch_size, eps=1e-6):
+        super().__init__()
+        self.dim = dim
+        self.out_dim = out_dim
+        self.patch_size = patch_size
+        self.eps = eps
+
+        out_dim = math.prod(patch_size) * out_dim
+        self.norm = LayerNorm(dim, eps)
+        self.head = nn.Linear(dim, out_dim)
+
+        self.modulation = nn.Parameter(torch.randn(1, 2, dim) / dim**0.5)
+
+    def forward(self, x, e):
+        """Project latents to output space with modulation."""
+        assert e.dtype == torch.float32
+        with torch.amp.autocast('cuda', dtype=torch.float32):
+            e = (self.modulation.unsqueeze(0) + e.unsqueeze(2)).chunk(2, dim=2)
+            x = (
+                self.head(
+                    self.norm(x) * (1 + e[1].squeeze(2)) + e[0].squeeze(2)))
+        return x
