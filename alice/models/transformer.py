@@ -239,3 +239,46 @@ class Head(nn.Module):
                 self.head(
                     self.norm(x) * (1 + e[1].squeeze(2)) + e[0].squeeze(2)))
         return x
+
+
+class AliceTransformer(nn.Module):
+    """Diffusion transformer backbone for text-to-video and image-to-video generation."""
+
+    _no_split_modules = ['AttentionBlock']
+
+    def __init__(self,
+                 model_type='t2v',
+                 patch_size=(1, 2, 2),
+                 text_len=512,
+                 in_dim=16,
+                 dim=2048,
+                 ffn_dim=8192,
+                 freq_dim=256,
+                 text_dim=4096,
+                 out_dim=16,
+                 num_heads=16,
+                 num_layers=32,
+                 window_size=(-1, -1),
+                 qk_norm=True,
+                 cross_attn_norm=True,
+                 eps=1e-6):
+        """Initialize transformer with specified architecture hyperparameters."""
+        super().__init__()
+
+        assert model_type in ['t2v', 'i2v', 'ti2v', 's2v']
+        self.model_type = model_type
+
+        self.patch_size = patch_size
+        self.text_len = text_len
+        self.in_dim = in_dim
+        self.dim = dim
+        self.ffn_dim = ffn_dim
+        self.freq_dim = freq_dim
+        self.text_dim = text_dim
+        self.out_dim = out_dim
+        self.num_heads = num_heads
+        self.num_layers = num_layers
+        self.window_size = window_size
+        self.qk_norm = qk_norm
+        self.cross_attn_norm = cross_attn_norm
+        self.eps = eps
