@@ -285,3 +285,6 @@ class AliceTransformer(nn.Module):
 
         self.patch_embedding = nn.Conv3d(
             in_dim, dim, kernel_size=patch_size, stride=patch_size)
+        self.text_embedding = nn.Sequential(
+            nn.Linear(text_dim, dim), nn.GELU(approximate='tanh'),
+            nn.Linear(dim, dim))
