@@ -292,3 +292,82 @@ class AliceTransformer(nn.Module):
         self.time_embedding = nn.Sequential(
             nn.Linear(freq_dim, dim), nn.SiLU(), nn.Linear(dim, dim))
         self.time_projection = nn.Sequential(nn.SiLU(), nn.Linear(dim, dim * 6))
+
+        self.blocks = nn.ModuleList([
+            AttentionBlock(dim, ffn_dim, num_heads, window_size, qk_norm,
+                              cross_attn_norm, eps) for _ in range(num_layers)
+        ])
+
+        self.head = Head(dim, out_dim, patch_size, eps)
+
+        assert (dim % num_heads) == 0 and (dim // num_heads) % 2 == 0
+        d = dim // num_heads
+        self.freqs = torch.cat([
+            rope_params(1024, d - 4 * (d // 6)),
+            rope_params(1024, 2 * (d // 6)),
+            rope_params(1024, 2 * (d // 6))
+        ],
+                               dim=1)
+
+    def forward(
+        self,
+        x,
+        t,
+        context,
+        seq_len,
+        y=None,
+    ):
+        """Predict noise for diffusion. Returns list of [C_out, F, H/8, W/8] tensors."""
+        if self.model_type == 'i2v':
+            assert y is not None
+        device = self.patch_embedding.weight.device
+        if self.freqs.device != device:
+            self.freqs = self.freqs.to(device)
+
+        if y is not None:
+            x = [torch.cat([u, v], dim=0) for u, v in zip(x, y)]
+
+        x = [self.patch_embedding(u.unsqueeze(0)) for u in x]
+        grid_sizes = torch.stack(
+            [torch.tensor(u.shape[2:], dtype=torch.long) for u in x])
+        x = [u.flatten(2).transpose(1, 2) for u in x]
+        seq_lens = torch.tensor([u.size(1) for u in x], dtype=torch.long)
+        assert seq_lens.max() <= seq_len
+        x = torch.cat([
+            torch.cat([u, u.new_zeros(1, seq_len - u.size(1), u.size(2))],
+                      dim=1) for u in x
+        ])
+
+        if t.dim() == 1:
+            t = t.expand(t.size(0), seq_len)
+        with torch.amp.autocast('cuda', dtype=torch.float32):
+            bt = t.size(0)
+            t = t.flatten()
+            e = self.time_embedding(
+                sinusoidal_embedding_1d(self.freq_dim,
+                                        t).unflatten(0, (bt, seq_len)).float())
+            e0 = self.time_projection(e).unflatten(2, (6, self.dim))
+            assert e.dtype == torch.float32 and e0.dtype == torch.float32
+
+        context_lens = None
+        context = self.text_embedding(
+            torch.stack([
+                torch.cat(
+                    [u, u.new_zeros(self.text_len - u.size(0), u.size(1))])
+                for u in context
+            ]))
+
+        kwargs = dict(
+            e=e0,
+            seq_lens=seq_lens,
+            grid_sizes=grid_sizes,
+            freqs=self.freqs,
+            context=context,
+            context_lens=context_lens)
+
+        for block in self.blocks:
+            x = block(x, **kwargs)
+
+        x = self.head(x, e)
+
+        return [u.float() for u in x]
