@@ -288,3 +288,7 @@ class AliceTransformer(nn.Module):
         self.text_embedding = nn.Sequential(
             nn.Linear(text_dim, dim), nn.GELU(approximate='tanh'),
             nn.Linear(dim, dim))
+
+        self.time_embedding = nn.Sequential(
+            nn.Linear(freq_dim, dim), nn.SiLU(), nn.Linear(dim, dim))
+        self.time_projection = nn.Sequential(nn.SiLU(), nn.Linear(dim, dim * 6))
