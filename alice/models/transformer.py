@@ -309,6 +309,8 @@ class AliceTransformer(nn.Module):
         ],
                                dim=1)
 
+        self.init_weights()
+
     def forward(
         self,
         x,
