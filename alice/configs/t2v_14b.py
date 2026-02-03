@@ -15,3 +15,5 @@ t2v_14b.vae_stride = (4, 8, 8)
 t2v_14b.dim = 5120
 t2v_14b.ffn_dim = 13824
 t2v_14b.freq_dim = 256
+t2v_14b.num_heads = 40
+t2v_14b.num_layers = 40
