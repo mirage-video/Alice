@@ -11,3 +11,7 @@ t2v_14b.t5_tokenizer = 'google/umt5-xxl'
 
 t2v_14b.vae_checkpoint = 'mirage_vae.pth'
 t2v_14b.vae_stride = (4, 8, 8)
+
+t2v_14b.dim = 5120
+t2v_14b.ffn_dim = 13824
+t2v_14b.freq_dim = 256
