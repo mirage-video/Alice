@@ -2,6 +2,8 @@ import math
 
 import torch
 import torch.nn as nn
+from diffusers.configuration_utils import ConfigMixin, register_to_config
+from diffusers.models.modeling_utils import ModelMixin
 
 from .attention import flash_attention
 
@@ -241,11 +243,15 @@ class Head(nn.Module):
         return x
 
 
-class AliceTransformer(nn.Module):
+class AliceTransformer(ModelMixin, ConfigMixin):
     """Diffusion transformer backbone for text-to-video and image-to-video generation."""
 
+    ignore_for_config = [
+        'patch_size', 'cross_attn_norm', 'qk_norm', 'text_dim', 'window_size'
+    ]
     _no_split_modules = ['AttentionBlock']
 
+    @register_to_config
     def __init__(self,
                  model_type='t2v',
                  patch_size=(1, 2, 2),
