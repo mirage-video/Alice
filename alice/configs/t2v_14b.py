@@ -27,3 +27,5 @@ t2v_14b.high_noise_checkpoint = 'high_noise_model'
 
 t2v_14b.sample_shift = 12.0
 t2v_14b.sample_steps = 40
+t2v_14b.boundary = 0.875
+t2v_14b.sample_guide_scale = (3.0, 4.0)  # low noise, high noise
