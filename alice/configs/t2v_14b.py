@@ -24,3 +24,6 @@ t2v_14b.cross_attn_norm = True
 t2v_14b.eps = 1e-6
 t2v_14b.low_noise_checkpoint = 'low_noise_model'
 t2v_14b.high_noise_checkpoint = 'high_noise_model'
+
+t2v_14b.sample_shift = 12.0
+t2v_14b.sample_steps = 40
