@@ -18,6 +18,13 @@ if is_scipy_available():
     pass
 
 
+def get_sampling_sigmas(sampling_steps, shift):
+    sigma = np.linspace(1, 0, sampling_steps + 1)[:sampling_steps]
+    sigma = (shift * sigma / (1 + (shift - 1) * sigma))
+
+    return sigma
+
+
 class FlowDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
     """DPM++ solver for flow-matching diffusion models."""
 
