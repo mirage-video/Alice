@@ -91,3 +91,64 @@ class FlowUniPCMultistepScheduler(SchedulerMixin, ConfigMixin):
     def set_begin_index(self, begin_index: int = 0):
         """Set the starting index for the scheduler."""
         self._begin_index = begin_index
+
+    def set_timesteps(
+        self,
+        num_inference_steps: Union[int, None] = None,
+        device: Union[str, torch.device] = None,
+        sigmas: Optional[List[float]] = None,
+        mu: Optional[Union[float, None]] = None,
+        shift: Optional[Union[float, None]] = None,
+    ):
+        """Set discrete timesteps for diffusion chain before inference."""
+
+        if self.config.use_dynamic_shifting and mu is None:
+            raise ValueError(
+                " you have to pass a value for `mu` when `use_dynamic_shifting` is set to be `True`"
+            )
+
+        if sigmas is None:
+            sigmas = np.linspace(self.sigma_max, self.sigma_min,
+                                 num_inference_steps +
+                                 1).copy()[:-1]  # pyright: ignore
+
+        if self.config.use_dynamic_shifting:
+            sigmas = self.time_shift(mu, 1.0, sigmas)  # pyright: ignore
+        else:
+            if shift is None:
+                shift = self.config.shift
+            sigmas = shift * sigmas / (1 +
+                                       (shift - 1) * sigmas)  # pyright: ignore
+
+        if self.config.final_sigmas_type == "sigma_min":
+            sigma_last = ((1 - self.alphas_cumprod[0]) /
+                          self.alphas_cumprod[0])**0.5
+        elif self.config.final_sigmas_type == "zero":
+            sigma_last = 0
+        else:
+            raise ValueError(
+                f"`final_sigmas_type` must be one of 'zero', or 'sigma_min', but got {self.config.final_sigmas_type}"
+            )
+
+        timesteps = sigmas * self.config.num_train_timesteps
+        sigmas = np.concatenate([sigmas, [sigma_last]
+                                ]).astype(np.float32)  # pyright: ignore
+
+        self.sigmas = torch.from_numpy(sigmas)
+        self.timesteps = torch.from_numpy(timesteps).to(
+            device=device, dtype=torch.int64)
+
+        self.num_inference_steps = len(timesteps)
+
+        self.model_outputs = [
+            None,
+        ] * self.config.solver_order
+        self.lower_order_nums = 0
+        self.last_sample = None
+        if self.solver_p:
+            self.solver_p.set_timesteps(self.num_inference_steps, device=device)
+
+        self._step_index = None
+        self._begin_index = None
+        self.sigmas = self.sigmas.to(
+            "cpu")  # to avoid too much CPU/GPU communication
