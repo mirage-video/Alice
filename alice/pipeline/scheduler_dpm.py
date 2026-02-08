@@ -215,5 +215,34 @@ class FlowDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
     def _sigma_to_alpha_sigma_t(self, sigma):
         return 1 - sigma, sigma
 
+    def _threshold_sample(self, sample: torch.Tensor) -> torch.Tensor:
+        """Apply dynamic thresholding to prevent saturation."""
+        dtype = sample.dtype
+        batch_size, channels, *remaining_dims = sample.shape
+
+        if dtype not in (torch.float32, torch.float64):
+            sample = sample.float(
+            )  # upcast for quantile calculation, and clamp not implemented for cpu half
+
+        sample = sample.reshape(batch_size, channels * np.prod(remaining_dims))
+
+        abs_sample = sample.abs()  # "a certain percentile absolute pixel value"
+
+        s = torch.quantile(
+            abs_sample, self.config.dynamic_thresholding_ratio, dim=1)
+        s = torch.clamp(
+            s, min=1, max=self.config.sample_max_value
+        )  # When clamped to min=1, equivalent to standard clipping to [-1, 1]
+        s = s.unsqueeze(
+            1)  # (batch_size, 1) because clamp will broadcast along dim=0
+        sample = torch.clamp(
+            sample, -s, s
+        ) / s  # "we threshold xt0 to the range [-s, s] and then divide by s"
+
+        sample = sample.reshape(batch_size, channels, *remaining_dims)
+        sample = sample.to(dtype)
+
+        return sample
+
     def time_shift(self, mu: float, sigma: float, t: torch.Tensor):
         return math.exp(mu) / (math.exp(mu) + (1 / t - 1)**sigma)
