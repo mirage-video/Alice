@@ -208,3 +208,12 @@ class FlowDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
 
         self._step_index = None
         self._begin_index = None
+
+    def _sigma_to_t(self, sigma):
+        return sigma * self.config.num_train_timesteps
+
+    def _sigma_to_alpha_sigma_t(self, sigma):
+        return 1 - sigma, sigma
+
+    def time_shift(self, mu: float, sigma: float, t: torch.Tensor):
+        return math.exp(mu) / (math.exp(mu) + (1 / t - 1)**sigma)

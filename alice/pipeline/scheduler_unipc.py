@@ -152,3 +152,12 @@ class FlowUniPCMultistepScheduler(SchedulerMixin, ConfigMixin):
         self._begin_index = None
         self.sigmas = self.sigmas.to(
             "cpu")  # to avoid too much CPU/GPU communication
+
+    def _sigma_to_t(self, sigma):
+        return sigma * self.config.num_train_timesteps
+
+    def _sigma_to_alpha_sigma_t(self, sigma):
+        return 1 - sigma, sigma
+
+    def time_shift(self, mu: float, sigma: float, t: torch.Tensor):
+        return math.exp(mu) / (math.exp(mu) + (1 / t - 1)**sigma)
