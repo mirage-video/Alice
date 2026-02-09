@@ -246,3 +246,372 @@ class FlowDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
 
     def time_shift(self, mu: float, sigma: float, t: torch.Tensor):
         return math.exp(mu) / (math.exp(mu) + (1 / t - 1)**sigma)
+
+    def convert_model_output(
+        self,
+        model_output: torch.Tensor,
+        *args,
+        sample: torch.Tensor = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        """Convert model output to x0 or epsilon prediction for solver."""
+        timestep = args[0] if len(args) > 0 else kwargs.pop("timestep", None)
+        if sample is None:
+            if len(args) > 1:
+                sample = args[1]
+            else:
+                raise ValueError(
+                    "missing `sample` as a required keyward argument")
+        if timestep is not None:
+            deprecate(
+                "timesteps",
+                "1.0.0",
+                "Passing `timesteps` is deprecated and has no effect as model output conversion is now handled via an internal counter `self.step_index`",
+            )
+
+        if self.config.algorithm_type in ["dpmsolver++", "sde-dpmsolver++"]:
+            if self.config.prediction_type == "flow_prediction":
+                sigma_t = self.sigmas[self.step_index]
+                x0_pred = sample - sigma_t * model_output
+            else:
+                raise ValueError(
+                    f"prediction_type given as {self.config.prediction_type} must be one of `epsilon`, `sample`,"
+                    " `v_prediction`, or `flow_prediction` for the FlowDPMSolverMultistepScheduler."
+                )
+
+            if self.config.thresholding:
+                x0_pred = self._threshold_sample(x0_pred)
+
+            return x0_pred
+
+        elif self.config.algorithm_type in ["dpmsolver", "sde-dpmsolver"]:
+            if self.config.prediction_type == "flow_prediction":
+                sigma_t = self.sigmas[self.step_index]
+                epsilon = sample - (1 - sigma_t) * model_output
+            else:
+                raise ValueError(
+                    f"prediction_type given as {self.config.prediction_type} must be one of `epsilon`, `sample`,"
+                    " `v_prediction` or `flow_prediction` for the FlowDPMSolverMultistepScheduler."
+                )
+
+            if self.config.thresholding:
+                sigma_t = self.sigmas[self.step_index]
+                x0_pred = sample - sigma_t * model_output
+                x0_pred = self._threshold_sample(x0_pred)
+                epsilon = model_output + x0_pred
+
+            return epsilon
+
+    def dpm_solver_first_order_update(
+        self,
+        model_output: torch.Tensor,
+        *args,
+        sample: torch.Tensor = None,
+        noise: Optional[torch.Tensor] = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        """First-order DPM solver step (equivalent to DDIM)."""
+        timestep = args[0] if len(args) > 0 else kwargs.pop("timestep", None)
+        prev_timestep = args[1] if len(args) > 1 else kwargs.pop(
+            "prev_timestep", None)
+        if sample is None:
+            if len(args) > 2:
+                sample = args[2]
+            else:
+                raise ValueError(
+                    " missing `sample` as a required keyward argument")
+        if timestep is not None:
+            deprecate(
+                "timesteps",
+                "1.0.0",
+                "Passing `timesteps` is deprecated and has no effect as model output conversion is now handled via an internal counter `self.step_index`",
+            )
+
+        if prev_timestep is not None:
+            deprecate(
+                "prev_timestep",
+                "1.0.0",
+                "Passing `prev_timestep` is deprecated and has no effect as model output conversion is now handled via an internal counter `self.step_index`",
+            )
+
+        sigma_t, sigma_s = self.sigmas[self.step_index + 1], self.sigmas[
+            self.step_index]  # pyright: ignore
+        alpha_t, sigma_t = self._sigma_to_alpha_sigma_t(sigma_t)
+        alpha_s, sigma_s = self._sigma_to_alpha_sigma_t(sigma_s)
+        lambda_t = torch.log(alpha_t) - torch.log(sigma_t)
+        lambda_s = torch.log(alpha_s) - torch.log(sigma_s)
+
+        h = lambda_t - lambda_s
+        if self.config.algorithm_type == "dpmsolver++":
+            x_t = (sigma_t /
+                   sigma_s) * sample - (alpha_t *
+                                        (torch.exp(-h) - 1.0)) * model_output
+        elif self.config.algorithm_type == "dpmsolver":
+            x_t = (alpha_t /
+                   alpha_s) * sample - (sigma_t *
+                                        (torch.exp(h) - 1.0)) * model_output
+        elif self.config.algorithm_type == "sde-dpmsolver++":
+            assert noise is not None
+            x_t = ((sigma_t / sigma_s * torch.exp(-h)) * sample +
+                   (alpha_t * (1 - torch.exp(-2.0 * h))) * model_output +
+                   sigma_t * torch.sqrt(1.0 - torch.exp(-2 * h)) * noise)
+        elif self.config.algorithm_type == "sde-dpmsolver":
+            assert noise is not None
+            x_t = ((alpha_t / alpha_s) * sample - 2.0 *
+                   (sigma_t * (torch.exp(h) - 1.0)) * model_output +
+                   sigma_t * torch.sqrt(torch.exp(2 * h) - 1.0) * noise)
+        return x_t  # pyright: ignore
+
+    def multistep_dpm_solver_second_order_update(
+        self,
+        model_output_list: List[torch.Tensor],
+        *args,
+        sample: torch.Tensor = None,
+        noise: Optional[torch.Tensor] = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        """Second-order multistep DPM solver update."""
+        timestep_list = args[0] if len(args) > 0 else kwargs.pop(
+            "timestep_list", None)
+        prev_timestep = args[1] if len(args) > 1 else kwargs.pop(
+            "prev_timestep", None)
+        if sample is None:
+            if len(args) > 2:
+                sample = args[2]
+            else:
+                raise ValueError(
+                    " missing `sample` as a required keyward argument")
+        if timestep_list is not None:
+            deprecate(
+                "timestep_list",
+                "1.0.0",
+                "Passing `timestep_list` is deprecated and has no effect as model output conversion is now handled via an internal counter `self.step_index`",
+            )
+
+        if prev_timestep is not None:
+            deprecate(
+                "prev_timestep",
+                "1.0.0",
+                "Passing `prev_timestep` is deprecated and has no effect as model output conversion is now handled via an internal counter `self.step_index`",
+            )
+
+        sigma_t, sigma_s0, sigma_s1 = (
+            self.sigmas[self.step_index + 1],  # pyright: ignore
+            self.sigmas[self.step_index],
+            self.sigmas[self.step_index - 1],  # pyright: ignore
+        )
+
+        alpha_t, sigma_t = self._sigma_to_alpha_sigma_t(sigma_t)
+        alpha_s0, sigma_s0 = self._sigma_to_alpha_sigma_t(sigma_s0)
+        alpha_s1, sigma_s1 = self._sigma_to_alpha_sigma_t(sigma_s1)
+
+        lambda_t = torch.log(alpha_t) - torch.log(sigma_t)
+        lambda_s0 = torch.log(alpha_s0) - torch.log(sigma_s0)
+        lambda_s1 = torch.log(alpha_s1) - torch.log(sigma_s1)
+
+        m0, m1 = model_output_list[-1], model_output_list[-2]
+
+        h, h_0 = lambda_t - lambda_s0, lambda_s0 - lambda_s1
+        r0 = h_0 / h
+        D0, D1 = m0, (1.0 / r0) * (m0 - m1)
+        if self.config.algorithm_type == "dpmsolver++":
+            if self.config.solver_type == "midpoint":
+                x_t = ((sigma_t / sigma_s0) * sample -
+                       (alpha_t * (torch.exp(-h) - 1.0)) * D0 - 0.5 *
+                       (alpha_t * (torch.exp(-h) - 1.0)) * D1)
+            elif self.config.solver_type == "heun":
+                x_t = ((sigma_t / sigma_s0) * sample -
+                       (alpha_t * (torch.exp(-h) - 1.0)) * D0 +
+                       (alpha_t * ((torch.exp(-h) - 1.0) / h + 1.0)) * D1)
+        elif self.config.algorithm_type == "dpmsolver":
+            if self.config.solver_type == "midpoint":
+                x_t = ((alpha_t / alpha_s0) * sample -
+                       (sigma_t * (torch.exp(h) - 1.0)) * D0 - 0.5 *
+                       (sigma_t * (torch.exp(h) - 1.0)) * D1)
+            elif self.config.solver_type == "heun":
+                x_t = ((alpha_t / alpha_s0) * sample -
+                       (sigma_t * (torch.exp(h) - 1.0)) * D0 -
+                       (sigma_t * ((torch.exp(h) - 1.0) / h - 1.0)) * D1)
+        elif self.config.algorithm_type == "sde-dpmsolver++":
+            assert noise is not None
+            if self.config.solver_type == "midpoint":
+                x_t = ((sigma_t / sigma_s0 * torch.exp(-h)) * sample +
+                       (alpha_t * (1 - torch.exp(-2.0 * h))) * D0 + 0.5 *
+                       (alpha_t * (1 - torch.exp(-2.0 * h))) * D1 +
+                       sigma_t * torch.sqrt(1.0 - torch.exp(-2 * h)) * noise)
+            elif self.config.solver_type == "heun":
+                x_t = ((sigma_t / sigma_s0 * torch.exp(-h)) * sample +
+                       (alpha_t * (1 - torch.exp(-2.0 * h))) * D0 +
+                       (alpha_t * ((1.0 - torch.exp(-2.0 * h)) /
+                                   (-2.0 * h) + 1.0)) * D1 +
+                       sigma_t * torch.sqrt(1.0 - torch.exp(-2 * h)) * noise)
+        elif self.config.algorithm_type == "sde-dpmsolver":
+            assert noise is not None
+            if self.config.solver_type == "midpoint":
+                x_t = ((alpha_t / alpha_s0) * sample - 2.0 *
+                       (sigma_t * (torch.exp(h) - 1.0)) * D0 -
+                       (sigma_t * (torch.exp(h) - 1.0)) * D1 +
+                       sigma_t * torch.sqrt(torch.exp(2 * h) - 1.0) * noise)
+            elif self.config.solver_type == "heun":
+                x_t = ((alpha_t / alpha_s0) * sample - 2.0 *
+                       (sigma_t * (torch.exp(h) - 1.0)) * D0 - 2.0 *
+                       (sigma_t * ((torch.exp(h) - 1.0) / h - 1.0)) * D1 +
+                       sigma_t * torch.sqrt(torch.exp(2 * h) - 1.0) * noise)
+        return x_t  # pyright: ignore
+
+    def multistep_dpm_solver_third_order_update(
+        self,
+        model_output_list: List[torch.Tensor],
+        *args,
+        sample: torch.Tensor = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        """Third-order multistep DPM solver update."""
+        timestep_list = args[0] if len(args) > 0 else kwargs.pop(
+            "timestep_list", None)
+        prev_timestep = args[1] if len(args) > 1 else kwargs.pop(
+            "prev_timestep", None)
+        if sample is None:
+            if len(args) > 2:
+                sample = args[2]
+            else:
+                raise ValueError(
+                    " missing`sample` as a required keyward argument")
+        if timestep_list is not None:
+            deprecate(
+                "timestep_list",
+                "1.0.0",
+                "Passing `timestep_list` is deprecated and has no effect as model output conversion is now handled via an internal counter `self.step_index`",
+            )
+
+        if prev_timestep is not None:
+            deprecate(
+                "prev_timestep",
+                "1.0.0",
+                "Passing `prev_timestep` is deprecated and has no effect as model output conversion is now handled via an internal counter `self.step_index`",
+            )
+
+        sigma_t, sigma_s0, sigma_s1, sigma_s2 = (
+            self.sigmas[self.step_index + 1],  # pyright: ignore
+            self.sigmas[self.step_index],
+            self.sigmas[self.step_index - 1],  # pyright: ignore
+            self.sigmas[self.step_index - 2],  # pyright: ignore
+        )
+
+        alpha_t, sigma_t = self._sigma_to_alpha_sigma_t(sigma_t)
+        alpha_s0, sigma_s0 = self._sigma_to_alpha_sigma_t(sigma_s0)
+        alpha_s1, sigma_s1 = self._sigma_to_alpha_sigma_t(sigma_s1)
+        alpha_s2, sigma_s2 = self._sigma_to_alpha_sigma_t(sigma_s2)
+
+        lambda_t = torch.log(alpha_t) - torch.log(sigma_t)
+        lambda_s0 = torch.log(alpha_s0) - torch.log(sigma_s0)
+        lambda_s1 = torch.log(alpha_s1) - torch.log(sigma_s1)
+        lambda_s2 = torch.log(alpha_s2) - torch.log(sigma_s2)
+
+        m0, m1, m2 = model_output_list[-1], model_output_list[
+            -2], model_output_list[-3]
+
+        h, h_0, h_1 = lambda_t - lambda_s0, lambda_s0 - lambda_s1, lambda_s1 - lambda_s2
+        r0, r1 = h_0 / h, h_1 / h
+        D0 = m0
+        D1_0, D1_1 = (1.0 / r0) * (m0 - m1), (1.0 / r1) * (m1 - m2)
+        D1 = D1_0 + (r0 / (r0 + r1)) * (D1_0 - D1_1)
+        D2 = (1.0 / (r0 + r1)) * (D1_0 - D1_1)
+        if self.config.algorithm_type == "dpmsolver++":
+            x_t = ((sigma_t / sigma_s0) * sample -
+                   (alpha_t * (torch.exp(-h) - 1.0)) * D0 +
+                   (alpha_t * ((torch.exp(-h) - 1.0) / h + 1.0)) * D1 -
+                   (alpha_t * ((torch.exp(-h) - 1.0 + h) / h**2 - 0.5)) * D2)
+        elif self.config.algorithm_type == "dpmsolver":
+            x_t = ((alpha_t / alpha_s0) * sample - (sigma_t *
+                                                    (torch.exp(h) - 1.0)) * D0 -
+                   (sigma_t * ((torch.exp(h) - 1.0) / h - 1.0)) * D1 -
+                   (sigma_t * ((torch.exp(h) - 1.0 - h) / h**2 - 0.5)) * D2)
+        return x_t  # pyright: ignore
+
+    def index_for_timestep(self, timestep, schedule_timesteps=None):
+        if schedule_timesteps is None:
+            schedule_timesteps = self.timesteps
+
+        indices = (schedule_timesteps == timestep).nonzero()
+
+        pos = 1 if len(indices) > 1 else 0
+
+        return indices[pos].item()
+
+    def _init_step_index(self, timestep):
+        """Initialize the step_index counter."""
+        if self.begin_index is None:
+            if isinstance(timestep, torch.Tensor):
+                timestep = timestep.to(self.timesteps.device)
+            self._step_index = self.index_for_timestep(timestep)
+        else:
+            self._step_index = self._begin_index
+
+    def step(
+        self,
+        model_output: torch.Tensor,
+        timestep: Union[int, torch.Tensor],
+        sample: torch.Tensor,
+        generator=None,
+        variance_noise: Optional[torch.Tensor] = None,
+        return_dict: bool = True,
+    ) -> Union[SchedulerOutput, Tuple]:
+        """Predict sample at previous timestep using multistep DPM solver."""
+        if self.num_inference_steps is None:
+            raise ValueError(
+                "Number of inference steps is 'None', you need to run 'set_timesteps' after creating the scheduler"
+            )
+
+        if self.step_index is None:
+            self._init_step_index(timestep)
+
+        lower_order_final = (self.step_index == len(self.timesteps) - 1) and (
+            self.config.euler_at_final or
+            (self.config.lower_order_final and len(self.timesteps) < 15) or
+            self.config.final_sigmas_type == "zero")
+        lower_order_second = ((self.step_index == len(self.timesteps) - 2) and
+                              self.config.lower_order_final and
+                              len(self.timesteps) < 15)
+
+        model_output = self.convert_model_output(model_output, sample=sample)
+        for i in range(self.config.solver_order - 1):
+            self.model_outputs[i] = self.model_outputs[i + 1]
+        self.model_outputs[-1] = model_output
+
+        sample = sample.to(torch.float32)
+        if self.config.algorithm_type in ["sde-dpmsolver", "sde-dpmsolver++"
+                                         ] and variance_noise is None:
+            noise = randn_tensor(
+                model_output.shape,
+                generator=generator,
+                device=model_output.device,
+                dtype=torch.float32)
+        elif self.config.algorithm_type in ["sde-dpmsolver", "sde-dpmsolver++"]:
+            noise = variance_noise.to(
+                device=model_output.device,
+                dtype=torch.float32)  # pyright: ignore
+        else:
+            noise = None
+
+        if self.config.solver_order == 1 or self.lower_order_nums < 1 or lower_order_final:
+            prev_sample = self.dpm_solver_first_order_update(
+                model_output, sample=sample, noise=noise)
+        elif self.config.solver_order == 2 or self.lower_order_nums < 2 or lower_order_second:
+            prev_sample = self.multistep_dpm_solver_second_order_update(
+                self.model_outputs, sample=sample, noise=noise)
+        else:
+            prev_sample = self.multistep_dpm_solver_third_order_update(
+                self.model_outputs, sample=sample)
+
+        if self.lower_order_nums < self.config.solver_order:
+            self.lower_order_nums += 1
+
+        prev_sample = prev_sample.to(model_output.dtype)
+
+        self._step_index += 1  # pyright: ignore
+
+        if not return_dict:
+            return (prev_sample,)
+
+        return SchedulerOutput(prev_sample=prev_sample)
