@@ -557,7 +557,19 @@ class FlowDPMSolverMultistepScheduler(SchedulerMixin, ConfigMixin):
         variance_noise: Optional[torch.Tensor] = None,
         return_dict: bool = True,
     ) -> Union[SchedulerOutput, Tuple]:
-        """Predict sample at previous timestep using multistep DPM solver."""
+        """Predict sample at previous timestep using multistep DPM solver.
+
+        Args:
+            model_output: Direct output from learned diffusion model.
+            timestep: Current discrete timestep in diffusion chain.
+            sample: Current instance of sample being created by diffusion process.
+            generator: Random number generator.
+            variance_noise: Optional variance noise for stochastic samplers.
+            return_dict: If True, return SchedulerOutput; else return tuple.
+
+        Returns:
+            SchedulerOutput or tuple with prev_sample.
+        """
         if self.num_inference_steps is None:
             raise ValueError(
                 "Number of inference steps is 'None', you need to run 'set_timesteps' after creating the scheduler"
