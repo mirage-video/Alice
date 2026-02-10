@@ -554,9 +554,11 @@ class Encoder3d(nn.Module):
             else:
                 x = layer(x)
 
-        # BUG: Missing feat_cache handling for middle blocks
         for layer in self.middle:
-            x = layer(x)
+            if isinstance(layer, ResidualBlock) and feat_cache is not None:
+                x = layer(x, feat_cache, feat_idx)
+            else:
+                x = layer(x)
 
         for layer in self.head:
             if isinstance(layer, CausalConv3d) and feat_cache is not None:
