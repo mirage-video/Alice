@@ -693,6 +693,315 @@ def count_conv3d(model):
     return count
 
 
+class AliceVAECore(nn.Module):
+
+    def __init__(
+        self,
+        dim=160,
+        dec_dim=256,
+        z_dim=16,
+        dim_mult=[1, 2, 4, 4],
+        num_res_blocks=2,
+        attn_scales=[],
+        temperal_downsample=[True, True, False],
+        dropout=0.0,
+    ):
+        super().__init__()
+        self.dim = dim
+        self.z_dim = z_dim
+        self.dim_mult = dim_mult
+        self.num_res_blocks = num_res_blocks
+        self.attn_scales = attn_scales
+        self.temperal_downsample = temperal_downsample
+        self.temperal_upsample = temperal_downsample[::-1]
+
+        self.encoder = Encoder3d(
+            dim,
+            z_dim * 2,
+            dim_mult,
+            num_res_blocks,
+            attn_scales,
+            self.temperal_downsample,
+            dropout,
+        )
+        self.conv1 = CausalConv3d(z_dim * 2, z_dim * 2, 1)
+        self.conv2 = CausalConv3d(z_dim, z_dim, 1)
+        self.decoder = Decoder3d(
+            dec_dim,
+            z_dim,
+            dim_mult,
+            num_res_blocks,
+            attn_scales,
+            self.temperal_upsample,
+            dropout,
+        )
+
+    def forward(self, x, scale=[0, 1]):
+        mu = self.encode(x, scale)
+        x_recon = self.decode(mu, scale)
+        return x_recon, mu
+
+    def encode(self, x, scale):
+        self.clear_cache()
+        x = patchify(x, patch_size=2)
+        t = x.shape[2]
+        iter_ = 1 + (t - 1) // 4
+        for i in range(iter_):
+            self._enc_conv_idx = [0]
+            if i == 0:
+                out = self.encoder(
+                    x[:, :, :1, :, :],
+                    feat_cache=self._enc_feat_map,
+                    feat_idx=self._enc_conv_idx,
+                )
+            else:
+                out_ = self.encoder(
+                    x[:, :, 1 + 4 * (i - 1):1 + 4 * i, :, :],
+                    feat_cache=self._enc_feat_map,
+                    feat_idx=self._enc_conv_idx,
+                )
+                out = torch.cat([out, out_], 2)
+        mu, log_var = self.conv1(out).chunk(2, dim=1)
+        if isinstance(scale[0], torch.Tensor):
+            mu = (mu - scale[0].view(1, self.z_dim, 1, 1, 1)) * scale[1].view(
+                1, self.z_dim, 1, 1, 1)
+        else:
+            mu = (mu - scale[0]) * scale[1]
+        self.clear_cache()
+        return mu
+
+    def decode(self, z, scale):
+        self.clear_cache()
+        if isinstance(scale[0], torch.Tensor):
+            z = z / scale[1].view(1, self.z_dim, 1, 1, 1) + scale[0].view(
+                1, self.z_dim, 1, 1, 1)
+        else:
+            z = z / scale[1] + scale[0]
+        iter_ = z.shape[2]
+        x = self.conv2(z)
+        for i in range(iter_):
+            self._conv_idx = [0]
+            if i == 0:
+                out = self.decoder(
+                    x[:, :, i:i + 1, :, :],
+                    feat_cache=self._feat_map,
+                    feat_idx=self._conv_idx,
+                    first_chunk=True,
+                )
+            else:
+                out_ = self.decoder(
+                    x[:, :, i:i + 1, :, :],
+                    feat_cache=self._feat_map,
+                    feat_idx=self._conv_idx,
+                )
+                out = torch.cat([out, out_], 2)
+        out = unpatchify(out, patch_size=2)
+        self.clear_cache()
+        return out
+
+    def reparameterize(self, mu, log_var):
+        std = torch.exp(0.5 * log_var)
+        eps = torch.randn_like(std)
+        return eps * std + mu
+
+    def sample(self, imgs, deterministic=False):
+        mu, log_var = self.encode(imgs)
+        if deterministic:
+            return mu
+        std = torch.exp(0.5 * log_var.clamp(-30.0, 20.0))
+        return mu + std * torch.randn_like(std)
+
+    def clear_cache(self):
+        self._conv_num = count_conv3d(self.decoder)
+        self._conv_idx = [0]
+        self._feat_map = [None] * self._conv_num
+        self._enc_conv_num = count_conv3d(self.encoder)
+        self._enc_conv_idx = [0]
+        self._enc_feat_map = [None] * self._enc_conv_num
+
+
+def _video_vae(pretrained_path=None, z_dim=16, dim=160, device="cpu", **kwargs):
+    cfg = dict(
+        dim=dim,
+        z_dim=z_dim,
+        dim_mult=[1, 2, 4, 4],
+        num_res_blocks=2,
+        attn_scales=[],
+        temperal_downsample=[True, True, True],
+        dropout=0.0,
+    )
+    cfg.update(**kwargs)
+
+    with torch.device("meta"):
+        model = AliceVAECore(**cfg)
+
+    logging.info(f"loading {pretrained_path}")
+    model.load_state_dict(
+        torch.load(pretrained_path, map_location=device), assign=True)
+
+    return model
+
+
 class AliceVAE22:
-    """Placeholder for VAE22 variant - implementation in progress."""
-    pass
+
+    def __init__(
+        self,
+        z_dim=48,
+        c_dim=160,
+        vae_pth=None,
+        dim_mult=[1, 2, 4, 4],
+        temperal_downsample=[False, True, True],
+        dtype=torch.float,
+        device="cuda",
+    ):
+
+        self.dtype = dtype
+        self.device = device
+
+        mean = torch.tensor(
+            [
+                -0.2289,
+                -0.0052,
+                -0.1323,
+                -0.2339,
+                -0.2799,
+                0.0174,
+                0.1838,
+                0.1557,
+                -0.1382,
+                0.0542,
+                0.2813,
+                0.0891,
+                0.1570,
+                -0.0098,
+                0.0375,
+                -0.1825,
+                -0.2246,
+                -0.1207,
+                -0.0698,
+                0.5109,
+                0.2665,
+                -0.2108,
+                -0.2158,
+                0.2502,
+                -0.2055,
+                -0.0322,
+                0.1109,
+                0.1567,
+                -0.0729,
+                0.0899,
+                -0.2799,
+                -0.1230,
+                -0.0313,
+                -0.1649,
+                0.0117,
+                0.0723,
+                -0.2839,
+                -0.2083,
+                -0.0520,
+                0.3748,
+                0.0152,
+                0.1957,
+                0.1433,
+                -0.2944,
+                0.3573,
+                -0.0548,
+                -0.1681,
+                -0.0667,
+            ],
+            dtype=dtype,
+            device=device,
+        )
+        std = torch.tensor(
+            [
+                0.4765,
+                1.0364,
+                0.4514,
+                1.1677,
+                0.5313,
+                0.4990,
+                0.4818,
+                0.5013,
+                0.8158,
+                1.0344,
+                0.5894,
+                1.0901,
+                0.6885,
+                0.6165,
+                0.8454,
+                0.4978,
+                0.5759,
+                0.3523,
+                0.7135,
+                0.6804,
+                0.5833,
+                1.4146,
+                0.8986,
+                0.5659,
+                0.7069,
+                0.5338,
+                0.4889,
+                0.4917,
+                0.4069,
+                0.4999,
+                0.6866,
+                0.4093,
+                0.5709,
+                0.6065,
+                0.6415,
+                0.4944,
+                0.5726,
+                1.2042,
+                0.5458,
+                1.6887,
+                0.3971,
+                1.0600,
+                0.3943,
+                0.5537,
+                0.5444,
+                0.4089,
+                0.7468,
+                0.7744,
+            ],
+            dtype=dtype,
+            device=device,
+        )
+        self.scale = [mean, 1.0 / std]
+
+        self.model = (
+            _video_vae(
+                pretrained_path=vae_pth,
+                z_dim=z_dim,
+                dim=c_dim,
+                dim_mult=dim_mult,
+                temperal_downsample=temperal_downsample,
+            ).eval().requires_grad_(False).to(device))
+
+    def encode(self, videos):
+        try:
+            if not isinstance(videos, list):
+                raise TypeError("videos should be a list")
+            with amp.autocast(dtype=self.dtype):
+                return [
+                    self.model.encode(u.unsqueeze(0),
+                                      self.scale).float().squeeze(0)
+                    for u in videos
+                ]
+        except TypeError as e:
+            logging.info(e)
+            return None
+
+    def decode(self, zs):
+        try:
+            if not isinstance(zs, list):
+                raise TypeError("zs should be a list")
+            with amp.autocast(dtype=self.dtype):
+                return [
+                    self.model.decode(u.unsqueeze(0),
+                                      self.scale).float().clamp_(-1,
+                                                                 1).squeeze(0)
+                    for u in zs
+                ]
+        except TypeError as e:
+            logging.info(e)
+            return None
