@@ -260,6 +260,220 @@ class AttentionBlock(nn.Module):
         return x + identity
 
 
+def patchify(x, patch_size):
+    if patch_size == 1:
+        return x
+    if x.dim() == 4:
+        x = rearrange(
+            x, "b c (h q) (w r) -> b (c r q) h w", q=patch_size, r=patch_size)
+    elif x.dim() == 5:
+        x = rearrange(
+            x,
+            "b c f (h q) (w r) -> b (c r q) f h w",
+            q=patch_size,
+            r=patch_size,
+        )
+    else:
+        raise ValueError(f"Invalid input shape: {x.shape}")
+
+    return x
+
+
+def unpatchify(x, patch_size):
+    if patch_size == 1:
+        return x
+
+    if x.dim() == 4:
+        x = rearrange(
+            x, "b (c r q) h w -> b c (h q) (w r)", q=patch_size, r=patch_size)
+    elif x.dim() == 5:
+        x = rearrange(
+            x,
+            "b (c r q) f h w -> b c f (h q) (w r)",
+            q=patch_size,
+            r=patch_size,
+        )
+    return x
+
+
+class AvgDown3D(nn.Module):
+
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        factor_t,
+        factor_s=1,
+    ):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.factor_t = factor_t
+        self.factor_s = factor_s
+        self.factor = self.factor_t * self.factor_s * self.factor_s
+
+        assert in_channels * self.factor % out_channels == 0
+        self.group_size = in_channels * self.factor // out_channels
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        pad_t = (self.factor_t - x.shape[2] % self.factor_t) % self.factor_t
+        pad = (0, 0, 0, 0, pad_t, 0)
+        x = F.pad(x, pad)
+        B, C, T, H, W = x.shape
+        x = x.view(
+            B,
+            C,
+            T // self.factor_t,
+            self.factor_t,
+            H // self.factor_s,
+            self.factor_s,
+            W // self.factor_s,
+            self.factor_s,
+        )
+        x = x.permute(0, 1, 3, 5, 7, 2, 4, 6).contiguous()
+        x = x.view(
+            B,
+            C * self.factor,
+            T // self.factor_t,
+            H // self.factor_s,
+            W // self.factor_s,
+        )
+        x = x.view(
+            B,
+            self.out_channels,
+            self.group_size,
+            T // self.factor_t,
+            H // self.factor_s,
+            W // self.factor_s,
+        )
+        x = x.mean(dim=2)
+        return x
+
+
+class DupUp3D(nn.Module):
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        factor_t,
+        factor_s=1,
+    ):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+
+        self.factor_t = factor_t
+        self.factor_s = factor_s
+        self.factor = self.factor_t * self.factor_s * self.factor_s
+
+        assert out_channels * self.factor % in_channels == 0
+        self.repeats = out_channels * self.factor // in_channels
+
+    def forward(self, x: torch.Tensor, first_chunk=False) -> torch.Tensor:
+        x = x.repeat_interleave(self.repeats, dim=1)
+        x = x.view(
+            x.size(0),
+            self.out_channels,
+            self.factor_t,
+            self.factor_s,
+            self.factor_s,
+            x.size(2),
+            x.size(3),
+            x.size(4),
+        )
+        x = x.permute(0, 1, 5, 2, 6, 3, 7, 4).contiguous()
+        x = x.view(
+            x.size(0),
+            self.out_channels,
+            x.size(2) * self.factor_t,
+            x.size(4) * self.factor_s,
+            x.size(6) * self.factor_s,
+        )
+        if first_chunk:
+            x = x[:, :, self.factor_t - 1:, :, :]
+        return x
+
+
+class Down_ResidualBlock(nn.Module):
+
+    def __init__(self,
+                 in_dim,
+                 out_dim,
+                 dropout,
+                 mult,
+                 temperal_downsample=False,
+                 down_flag=False):
+        super().__init__()
+
+        self.avg_shortcut = AvgDown3D(
+            in_dim,
+            out_dim,
+            factor_t=2 if temperal_downsample else 1,
+            factor_s=2 if down_flag else 1,
+        )
+
+        downsamples = []
+        for _ in range(mult):
+            downsamples.append(ResidualBlock(in_dim, out_dim, dropout))
+            in_dim = out_dim
+
+        if down_flag:
+            mode = "downsample3d" if temperal_downsample else "downsample2d"
+            downsamples.append(Resample(out_dim, mode=mode))
+
+        self.downsamples = nn.Sequential(*downsamples)
+
+    def forward(self, x, feat_cache=None, feat_idx=[0]):
+        x_copy = x.clone()
+        for module in self.downsamples:
+            x = module(x, feat_cache, feat_idx)
+
+        return x + self.avg_shortcut(x_copy)
+
+
+class Up_ResidualBlock(nn.Module):
+
+    def __init__(self,
+                 in_dim,
+                 out_dim,
+                 dropout,
+                 mult,
+                 temperal_upsample=False,
+                 up_flag=False):
+        super().__init__()
+        if up_flag:
+            self.avg_shortcut = DupUp3D(
+                in_dim,
+                out_dim,
+                factor_t=2 if temperal_upsample else 1,
+                factor_s=2 if up_flag else 1,
+            )
+        else:
+            self.avg_shortcut = None
+
+        upsamples = []
+        for _ in range(mult):
+            upsamples.append(ResidualBlock(in_dim, out_dim, dropout))
+            in_dim = out_dim
+
+        if up_flag:
+            mode = "upsample3d" if temperal_upsample else "upsample2d"
+            upsamples.append(Resample(out_dim, mode=mode))
+
+        self.upsamples = nn.Sequential(*upsamples)
+
+    def forward(self, x, feat_cache=None, feat_idx=[0], first_chunk=False):
+        x_main = x.clone()
+        for module in self.upsamples:
+            x_main = module(x_main, feat_cache, feat_idx)
+        if self.avg_shortcut is not None:
+            x_shortcut = self.avg_shortcut(x, first_chunk)
+            return x_main + x_shortcut
+        else:
+            return x_main
+
+
 class AliceVAE22:
     """Placeholder for VAE22 variant - implementation in progress."""
     pass
