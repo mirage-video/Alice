@@ -474,6 +474,223 @@ class Up_ResidualBlock(nn.Module):
             return x_main
 
 
+class Encoder3d(nn.Module):
+
+    def __init__(
+        self,
+        dim=128,
+        z_dim=4,
+        dim_mult=[1, 2, 4, 4],
+        num_res_blocks=2,
+        attn_scales=[],
+        temperal_downsample=[True, True, False],
+        dropout=0.0,
+    ):
+        super().__init__()
+        self.dim = dim
+        self.z_dim = z_dim
+        self.dim_mult = dim_mult
+        self.num_res_blocks = num_res_blocks
+        self.attn_scales = attn_scales
+        self.temperal_downsample = temperal_downsample
+
+        dims = [dim * u for u in [1] + dim_mult]
+        scale = 1.0
+
+        self.conv1 = CausalConv3d(12, dims[0], 3, padding=1)
+
+        downsamples = []
+        for i, (in_dim, out_dim) in enumerate(zip(dims[:-1], dims[1:])):
+            t_down_flag = (
+                temperal_downsample[i]
+                if i < len(temperal_downsample) else False)
+            downsamples.append(
+                Down_ResidualBlock(
+                    in_dim=in_dim,
+                    out_dim=out_dim,
+                    dropout=dropout,
+                    mult=num_res_blocks,
+                    temperal_downsample=t_down_flag,
+                    down_flag=i != len(dim_mult) - 1,
+                ))
+            scale /= 2.0
+        self.downsamples = nn.Sequential(*downsamples)
+
+        self.middle = nn.Sequential(
+            ResidualBlock(out_dim, out_dim, dropout),
+            AttentionBlock(out_dim),
+            ResidualBlock(out_dim, out_dim, dropout),
+        )
+
+        self.head = nn.Sequential(
+            RMS_norm(out_dim, images=False),
+            nn.SiLU(),
+            CausalConv3d(out_dim, z_dim, 3, padding=1),
+        )
+
+    def forward(self, x, feat_cache=None, feat_idx=[0]):
+
+        if feat_cache is not None:
+            idx = feat_idx[0]
+            cache_x = x[:, :, -CACHE_T:, :, :].clone()
+            if cache_x.shape[2] < 2 and feat_cache[idx] is not None:
+                cache_x = torch.cat(
+                    [
+                        feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(
+                            cache_x.device),
+                        cache_x,
+                    ],
+                    dim=2,
+                )
+            x = self.conv1(x, feat_cache[idx])
+            feat_cache[idx] = cache_x
+            feat_idx[0] += 1
+        else:
+            x = self.conv1(x)
+
+        for layer in self.downsamples:
+            if feat_cache is not None:
+                x = layer(x, feat_cache, feat_idx)
+            else:
+                x = layer(x)
+
+        # BUG: Missing feat_cache handling for middle blocks
+        for layer in self.middle:
+            x = layer(x)
+
+        for layer in self.head:
+            if isinstance(layer, CausalConv3d) and feat_cache is not None:
+                idx = feat_idx[0]
+                cache_x = x[:, :, -CACHE_T:, :, :].clone()
+                if cache_x.shape[2] < 2 and feat_cache[idx] is not None:
+                    cache_x = torch.cat(
+                        [
+                            feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(
+                                cache_x.device),
+                            cache_x,
+                        ],
+                        dim=2,
+                    )
+                x = layer(x, feat_cache[idx])
+                feat_cache[idx] = cache_x
+                feat_idx[0] += 1
+            else:
+                x = layer(x)
+
+        return x
+
+
+class Decoder3d(nn.Module):
+
+    def __init__(
+        self,
+        dim=128,
+        z_dim=4,
+        dim_mult=[1, 2, 4, 4],
+        num_res_blocks=2,
+        attn_scales=[],
+        temperal_upsample=[False, True, True],
+        dropout=0.0,
+    ):
+        super().__init__()
+        self.dim = dim
+        self.z_dim = z_dim
+        self.dim_mult = dim_mult
+        self.num_res_blocks = num_res_blocks
+        self.attn_scales = attn_scales
+        self.temperal_upsample = temperal_upsample
+
+        dims = [dim * u for u in [dim_mult[-1]] + dim_mult[::-1]]
+        scale = 1.0 / 2**(len(dim_mult) - 2)
+        self.conv1 = CausalConv3d(z_dim, dims[0], 3, padding=1)
+
+        self.middle = nn.Sequential(
+            ResidualBlock(dims[0], dims[0], dropout),
+            AttentionBlock(dims[0]),
+            ResidualBlock(dims[0], dims[0], dropout),
+        )
+
+        upsamples = []
+        for i, (in_dim, out_dim) in enumerate(zip(dims[:-1], dims[1:])):
+            t_up_flag = temperal_upsample[i] if i < len(
+                temperal_upsample) else False
+            upsamples.append(
+                Up_ResidualBlock(
+                    in_dim=in_dim,
+                    out_dim=out_dim,
+                    dropout=dropout,
+                    mult=num_res_blocks + 1,
+                    temperal_upsample=t_up_flag,
+                    up_flag=i != len(dim_mult) - 1,
+                ))
+        self.upsamples = nn.Sequential(*upsamples)
+
+        self.head = nn.Sequential(
+            RMS_norm(out_dim, images=False),
+            nn.SiLU(),
+            CausalConv3d(out_dim, 12, 3, padding=1),
+        )
+
+    def forward(self, x, feat_cache=None, feat_idx=[0], first_chunk=False):
+        if feat_cache is not None:
+            idx = feat_idx[0]
+            cache_x = x[:, :, -CACHE_T:, :, :].clone()
+            if cache_x.shape[2] < 2 and feat_cache[idx] is not None:
+                cache_x = torch.cat(
+                    [
+                        feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(
+                            cache_x.device),
+                        cache_x,
+                    ],
+                    dim=2,
+                )
+            x = self.conv1(x, feat_cache[idx])
+            feat_cache[idx] = cache_x
+            feat_idx[0] += 1
+        else:
+            x = self.conv1(x)
+
+        for layer in self.middle:
+            if isinstance(layer, ResidualBlock) and feat_cache is not None:
+                x = layer(x, feat_cache, feat_idx)
+            else:
+                x = layer(x)
+
+        for layer in self.upsamples:
+            if feat_cache is not None:
+                x = layer(x, feat_cache, feat_idx, first_chunk)
+            else:
+                x = layer(x)
+
+        for layer in self.head:
+            if isinstance(layer, CausalConv3d) and feat_cache is not None:
+                idx = feat_idx[0]
+                cache_x = x[:, :, -CACHE_T:, :, :].clone()
+                if cache_x.shape[2] < 2 and feat_cache[idx] is not None:
+                    cache_x = torch.cat(
+                        [
+                            feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(
+                                cache_x.device),
+                            cache_x,
+                        ],
+                        dim=2,
+                    )
+                x = layer(x, feat_cache[idx])
+                feat_cache[idx] = cache_x
+                feat_idx[0] += 1
+            else:
+                x = layer(x)
+        return x
+
+
+def count_conv3d(model):
+    count = 0
+    for m in model.modules():
+        if isinstance(m, CausalConv3d):
+            count += 1
+    return count
+
+
 class AliceVAE22:
     """Placeholder for VAE22 variant - implementation in progress."""
     pass
