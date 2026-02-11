@@ -29,9 +29,32 @@ from .scheduler_unipc import FlowUniPCMultistepScheduler
 
 class AliceTextToVideo:
 
-    def __init__(self):
-        """Initialize text-to-video pipeline."""
-        pass
+    def __init__(
+        self,
+        config,
+        checkpoint_dir,
+        device_id=0,
+        rank=0,
+        t5_fsdp=False,
+        dit_fsdp=False,
+        use_sp=False,
+        t5_cpu=False,
+        init_on_cpu=True,
+        convert_model_dtype=False,
+    ):
+        """Initialize text-to-video pipeline with text encoder, VAE, and DiT models."""
+        self.device = torch.device(f"cuda:{device_id}")
+        self.config = config
+        self.rank = rank
+        self.t5_cpu = t5_cpu
+        self.init_on_cpu = init_on_cpu
+
+        self.num_train_timesteps = config.num_train_timesteps
+        self.boundary = config.boundary
+        self.param_dtype = config.param_dtype
+
+        if t5_fsdp or dit_fsdp or use_sp:
+            self.init_on_cpu = False
 
     def generate(self):
         """Generate video from text prompt."""
