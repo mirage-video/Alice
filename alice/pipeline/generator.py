@@ -25,3 +25,14 @@ from .scheduler_dpm import (
     retrieve_timesteps,
 )
 from .scheduler_unipc import FlowUniPCMultistepScheduler
+
+
+class AliceTextToVideo:
+
+    def __init__(self):
+        """Initialize text-to-video pipeline."""
+        pass
+
+    def generate(self):
+        """Generate video from text prompt."""
+        pass
