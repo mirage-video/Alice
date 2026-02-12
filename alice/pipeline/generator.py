@@ -65,6 +65,12 @@ class AliceTextToVideo:
             tokenizer_path=os.path.join(checkpoint_dir, config.t5_tokenizer),
             shard_fn=shard_fn if t5_fsdp else None)
 
+        self.vae_stride = config.vae_stride
+        self.patch_size = config.patch_size
+        self.vae = AliceVAE(
+            vae_pth=os.path.join(checkpoint_dir, config.vae_checkpoint),
+            device=self.device)
+
     def generate(self):
         """Generate video from text prompt."""
         pass
