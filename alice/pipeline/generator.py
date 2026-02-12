@@ -72,8 +72,13 @@ class AliceTextToVideo:
             device=self.device)
 
         logging.info(f"Creating AliceTransformer from {checkpoint_dir}")
-        self.model = AliceTransformer.from_pretrained(
+        self.low_noise_model = AliceTransformer.from_pretrained(
             checkpoint_dir, subfolder=config.low_noise_checkpoint)
+
+        self.high_noise_model = AliceTransformer.from_pretrained(
+            checkpoint_dir, subfolder=config.high_noise_checkpoint)
+
+        self.sample_neg_prompt = config.sample_neg_prompt
 
     def generate(self):
         """Generate video from text prompt."""
