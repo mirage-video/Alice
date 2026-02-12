@@ -74,11 +74,51 @@ class AliceTextToVideo:
         logging.info(f"Creating AliceTransformer from {checkpoint_dir}")
         self.low_noise_model = AliceTransformer.from_pretrained(
             checkpoint_dir, subfolder=config.low_noise_checkpoint)
+        self.low_noise_model = self._configure_model(
+            model=self.low_noise_model,
+            use_sp=use_sp,
+            dit_fsdp=dit_fsdp,
+            shard_fn=shard_fn,
+            convert_model_dtype=convert_model_dtype)
 
         self.high_noise_model = AliceTransformer.from_pretrained(
             checkpoint_dir, subfolder=config.high_noise_checkpoint)
+        self.high_noise_model = self._configure_model(
+            model=self.high_noise_model,
+            use_sp=use_sp,
+            dit_fsdp=dit_fsdp,
+            shard_fn=shard_fn,
+            convert_model_dtype=convert_model_dtype)
+        if use_sp:
+            self.sp_size = get_world_size()
+        else:
+            self.sp_size = 1
 
         self.sample_neg_prompt = config.sample_neg_prompt
+
+    def _configure_model(self, model, use_sp, dit_fsdp, shard_fn,
+                         convert_model_dtype):
+        """Configure model for inference with optional distributed strategies."""
+        model.eval().requires_grad_(False)
+
+        if use_sp:
+            for block in model.blocks:
+                block.self_attn.forward = types.MethodType(
+                    sp_attn_forward, block.self_attn)
+            model.forward = types.MethodType(sp_dit_forward, model)
+
+        if dist.is_initialized():
+            dist.barrier()
+
+        if dit_fsdp:
+            model = shard_fn(model)
+        else:
+            if convert_model_dtype:
+                model.to(self.param_dtype)
+            if not self.init_on_cpu:
+                model.to(self.device)
+
+        return model
 
     def generate(self):
         """Generate video from text prompt."""
