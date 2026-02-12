@@ -71,6 +71,10 @@ class AliceTextToVideo:
             vae_pth=os.path.join(checkpoint_dir, config.vae_checkpoint),
             device=self.device)
 
+        logging.info(f"Creating AliceTransformer from {checkpoint_dir}")
+        self.model = AliceTransformer.from_pretrained(
+            checkpoint_dir, subfolder=config.low_noise_checkpoint)
+
     def generate(self):
         """Generate video from text prompt."""
         pass
