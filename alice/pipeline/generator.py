@@ -164,3 +164,17 @@ class AliceTextToVideo:
 
         if n_prompt == "":
             n_prompt = self.sample_neg_prompt
+        seed = seed if seed >= 0 else random.randint(0, sys.maxsize)
+        seed_g = torch.Generator(device=self.device)
+        seed_g.manual_seed(seed)
+
+        noise = [
+            torch.randn(
+                target_shape[0],
+                target_shape[1],
+                target_shape[2],
+                target_shape[3],
+                dtype=torch.float32,
+                device=self.device,
+                generator=seed_g)
+        ]
