@@ -139,6 +139,28 @@ class AliceTextToVideo:
                 getattr(self, required_model_name).to(self.device)
         return getattr(self, required_model_name)
 
-    def generate(self):
-        """Generate video from text prompt."""
-        pass
+    def generate(self,
+                 input_prompt,
+                 size=(1280, 720),
+                 frame_num=81,
+                 shift=5.0,
+                 sample_solver='unipc',
+                 sampling_steps=50,
+                 guide_scale=5.0,
+                 n_prompt="",
+                 seed=-1,
+                 offload_model=True):
+        """Generate video from text prompt. Returns tensor [C, N, H, W]."""
+        guide_scale = (guide_scale, guide_scale) if isinstance(
+            guide_scale, float) else guide_scale
+        F = frame_num
+        target_shape = (self.vae.model.z_dim, (F - 1) // self.vae_stride[0] + 1,
+                        size[1] // self.vae_stride[1],
+                        size[0] // self.vae_stride[2])
+
+        seq_len = math.ceil((target_shape[2] * target_shape[3]) /
+                            (self.patch_size[1] * self.patch_size[2]) *
+                            target_shape[1] / self.sp_size) * self.sp_size
+
+        if n_prompt == "":
+            n_prompt = self.sample_neg_prompt
