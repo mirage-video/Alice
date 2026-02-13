@@ -120,6 +120,25 @@ class AliceTextToVideo:
 
         return model
 
+    def _prepare_model_for_timestep(self, t, boundary, offload_model):
+        """Select and prepare the appropriate model (high/low noise) for timestep."""
+        if t.item() >= boundary:
+            required_model_name = 'high_noise_model'
+            offload_model_name = 'low_noise_model'
+        else:
+            required_model_name = 'low_noise_model'
+            offload_model_name = 'high_noise_model'
+        if offload_model or self.init_on_cpu:
+            if next(getattr(
+                    self,
+                    offload_model_name).parameters()).device.type == 'cuda':
+                getattr(self, offload_model_name).to('cpu')
+            if next(getattr(
+                    self,
+                    required_model_name).parameters()).device.type == 'cpu':
+                getattr(self, required_model_name).to(self.device)
+        return getattr(self, required_model_name)
+
     def generate(self):
         """Generate video from text prompt."""
         pass
