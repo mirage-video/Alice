@@ -190,3 +190,51 @@ class AliceTextToVideo:
                 device=self.device,
                 generator=seed_g)
         ]
+
+        @contextmanager
+        def noop_no_sync():
+            yield
+
+        no_sync_low_noise = getattr(self.low_noise_model, 'no_sync',
+                                    noop_no_sync)
+        no_sync_high_noise = getattr(self.high_noise_model, 'no_sync',
+                                     noop_no_sync)
+
+        with (
+                torch.amp.autocast('cuda', dtype=self.param_dtype),
+                torch.no_grad(),
+                no_sync_low_noise(),
+                no_sync_high_noise(),
+        ):
+            boundary = self.boundary * self.num_train_timesteps
+
+            if sample_solver == 'unipc':
+                sample_scheduler = FlowUniPCMultistepScheduler(
+                    num_train_timesteps=self.num_train_timesteps,
+                    shift=1,
+                    use_dynamic_shifting=False)
+                sample_scheduler.set_timesteps(
+                    sampling_steps, device=self.device, shift=shift)
+                timesteps = sample_scheduler.timesteps
+            elif sample_solver == 'dpm++':
+                sample_scheduler = FlowDPMSolverMultistepScheduler(
+                    num_train_timesteps=self.num_train_timesteps,
+                    shift=1,
+                    use_dynamic_shifting=False)
+                sampling_sigmas = get_sampling_sigmas(sampling_steps, shift)
+                timesteps, _ = retrieve_timesteps(
+                    sample_scheduler,
+                    device=self.device,
+                    sigmas=sampling_sigmas)
+            else:
+                raise NotImplementedError("Unsupported solver.")
+
+            latents = noise
+
+            for _, t in enumerate(timesteps):
+                latent_model_input = latents
+                timestep = [t]
+                timestep = torch.stack(timestep)
+
+                model = self._prepare_model_for_timestep(
+                    t, boundary, offload_model)
