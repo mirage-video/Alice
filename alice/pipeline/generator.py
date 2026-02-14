@@ -262,3 +262,7 @@ class AliceTextToVideo:
                 latents = [temp_x0.squeeze(0)]
 
             x0 = latents
+            if self.rank == 0:
+                videos = self.vae.decode(x0)
+
+        return videos[0] if self.rank == 0 else None
