@@ -252,3 +252,13 @@ class AliceTextToVideo:
 
                 noise_pred = noise_pred_uncond + sample_guide_scale * (
                     noise_pred_cond - noise_pred_uncond)
+
+                temp_x0 = sample_scheduler.step(
+                    noise_pred.unsqueeze(0),
+                    t,
+                    latents[0].unsqueeze(0),
+                    return_dict=False,
+                    generator=seed_g)[0]
+                latents = [temp_x0.squeeze(0)]
+
+            x0 = latents
