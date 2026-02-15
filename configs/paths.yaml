@@ -1,0 +1,7 @@
+weights:
+  base_path: "D:\\Wan2.2-T2V-A14B-perturbed"
+  transformer_low_noise: "low_noise_model"
+  transformer_high_noise: "high_noise_model"
+  vae: "mirage_vae.pth"
+  text_encoder: "models_t5_umt5-xxl-enc-bf16.pth"
+  tokenizer: "google/umt5-xxl"
