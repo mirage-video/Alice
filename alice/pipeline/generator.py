@@ -262,7 +262,19 @@ class AliceTextToVideo:
                 latents = [temp_x0.squeeze(0)]
 
             x0 = latents
+            if offload_model:
+                self.low_noise_model.cpu()
+                self.high_noise_model.cpu()
+                torch.cuda.empty_cache()
             if self.rank == 0:
                 videos = self.vae.decode(x0)
+
+        del noise, latents
+        del sample_scheduler
+        if offload_model:
+            gc.collect()
+            torch.cuda.synchronize()
+        if dist.is_initialized():
+            dist.barrier()
 
         return videos[0] if self.rank == 0 else None
