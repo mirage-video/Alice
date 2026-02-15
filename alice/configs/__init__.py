@@ -1,3 +1,7 @@
+import os
+
+os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+
 from .t2v_14b import t2v_14b
 
 ALICE_CONFIGS = {
