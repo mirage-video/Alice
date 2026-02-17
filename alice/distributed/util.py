@@ -6,3 +6,11 @@ def init_distributed_group():
     """Initialize distributed process group."""
     if not dist.is_initialized():
         dist.init_process_group(backend='nccl')
+
+
+def get_rank():
+    return dist.get_rank()
+
+
+def get_world_size():
+    return dist.get_world_size()
