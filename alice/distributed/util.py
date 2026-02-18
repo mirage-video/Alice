@@ -34,3 +34,12 @@ def all_gather(tensor):
     tensor_list = [torch.empty_like(tensor) for _ in range(world_size)]
     torch.distributed.all_gather(tensor_list, tensor)
     return tensor_list
+
+
+def gather_forward(input, dim):
+    world_size = dist.get_world_size()
+    if world_size == 1:
+        return input
+
+    output = all_gather(input)
+    return torch.cat(output, dim=dim).contiguous()
