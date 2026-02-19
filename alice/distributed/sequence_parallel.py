@@ -16,3 +16,35 @@ def pad_freqs(original_tensor, target_len):
         device=original_tensor.device)
     padded_tensor = torch.cat([original_tensor, padding_tensor], dim=0)
     return padded_tensor
+
+
+@torch.amp.autocast('cuda', enabled=False)
+def rope_apply(x, grid_sizes, freqs):
+    """Apply rotary embeddings with sequence parallel support."""
+    s, n, c = x.size(1), x.size(2), x.size(3) // 2
+    freqs = freqs.split([c - 2 * (c // 3), c // 3, c // 3], dim=1)
+
+    output = []
+    for i, (f, h, w) in enumerate(grid_sizes.tolist()):
+        seq_len = f * h * w
+
+        x_i = torch.view_as_complex(x[i, :s].to(torch.float64).reshape(
+            s, n, -1, 2))
+        freqs_i = torch.cat([
+            freqs[0][:f].view(f, 1, 1, -1).expand(f, h, w, -1),
+            freqs[1][:h].view(1, h, 1, -1).expand(f, h, w, -1),
+            freqs[2][:w].view(1, 1, w, -1).expand(f, h, w, -1)
+        ],
+                            dim=-1).reshape(seq_len, 1, -1)
+
+        sp_size = get_world_size()
+        sp_rank = get_rank()
+        freqs_i = pad_freqs(freqs_i, s * sp_size)
+        s_per_rank = s
+        freqs_i_rank = freqs_i[(sp_rank * s_per_rank):((sp_rank + 1) *
+                                                       s_per_rank), :, :]
+        x_i = torch.view_as_real(x_i * freqs_i_rank).flatten(2)
+        x_i = torch.cat([x_i, x[i, s:]])
+
+        output.append(x_i)
+    return torch.stack(output).float()
