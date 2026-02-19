@@ -2,6 +2,7 @@ import torch
 import torch.cuda.amp as amp
 
 from ..models.transformer import sinusoidal_embedding_1d
+from .ulysses import distributed_attention
 from .util import gather_forward, get_rank, get_world_size
 
 
@@ -118,3 +119,33 @@ def sp_dit_forward(
 
     x = self.unpatchify(x, grid_sizes)
     return [u.float() for u in x]
+
+
+def sp_attn_forward(self, x, seq_lens, grid_sizes, freqs, dtype=torch.bfloat16):
+    b, s, n, d = *x.shape[:2], self.num_heads, self.head_dim
+    half_dtypes = (torch.float16, torch.bfloat16)
+
+    def half(x):
+        return x if x.dtype in half_dtypes else x.to(dtype)
+
+    def qkv_fn(x):
+        q = self.norm_q(self.q(x)).view(b, s, n, d)
+        k = self.norm_k(self.k(x)).view(b, s, n, d)
+        v = self.v(x).view(b, s, n, d)
+        return q, k, v
+
+    q, k, v = qkv_fn(x)
+    q = rope_apply(q, grid_sizes, freqs)
+    k = rope_apply(k, grid_sizes, freqs)
+
+    x = distributed_attention(
+        half(q),
+        half(k),
+        half(v),
+        seq_lens,
+        window_size=self.window_size,
+    )
+
+    x = x.flatten(2)
+    x = self.o(x)
+    return x
