@@ -7,3 +7,4 @@ imageio
 transformers>=4.49.0
 ftfy
 flash_attn
+accelerate
