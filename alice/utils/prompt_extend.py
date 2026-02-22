@@ -307,3 +307,93 @@ class QwenPromptExpander(PromptExpander):
                 if FLASH_VER == 2 else None,
                 device_map="cpu")
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+
+    def extend(self, prompt, system_prompt, seed=-1, *args, **kwargs):
+        self.model = self.model.to(self.device)
+        messages = [{
+            "role": "system",
+            "content": system_prompt
+        }, {
+            "role": "user",
+            "content": prompt
+        }]
+        text = self.tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True)
+        model_inputs = self.tokenizer([text],
+                                      return_tensors="pt").to(self.model.device)
+
+        generated_ids = self.model.generate(**model_inputs, max_new_tokens=512)
+        generated_ids = [
+            output_ids[len(input_ids):] for input_ids, output_ids in zip(
+                model_inputs.input_ids, generated_ids)
+        ]
+
+        expanded_prompt = self.tokenizer.batch_decode(
+            generated_ids, skip_special_tokens=True)[0]
+        self.model = self.model.to("cpu")
+        return PromptOutput(
+            status=True,
+            prompt=expanded_prompt,
+            seed=seed,
+            system_prompt=system_prompt,
+            message=json.dumps({"content": expanded_prompt},
+                               ensure_ascii=False))
+
+    def extend_with_img(self,
+                        prompt,
+                        system_prompt,
+                        image: Union[Image.Image, str] = None,
+                        seed=-1,
+                        *args,
+                        **kwargs):
+        self.model = self.model.to(self.device)
+        messages = [{
+            'role': 'system',
+            'content': [{
+                "type": "text",
+                "text": system_prompt
+            }]
+        }, {
+            "role":
+                "user",
+            "content": [
+                {
+                    "type": "image",
+                    "image": image,
+                },
+                {
+                    "type": "text",
+                    "text": prompt
+                },
+            ],
+        }]
+
+        text = self.processor.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True)
+        image_inputs, video_inputs = self.process_vision_info(messages)
+        inputs = self.processor(
+            text=[text],
+            images=image_inputs,
+            videos=video_inputs,
+            padding=True,
+            return_tensors="pt",
+        )
+        inputs = inputs.to(self.device)
+
+        generated_ids = self.model.generate(**inputs, max_new_tokens=512)
+        generated_ids_trimmed = [
+            out_ids[len(in_ids):]
+            for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+        ]
+        expanded_prompt = self.processor.batch_decode(
+            generated_ids_trimmed,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False)[0]
+        self.model = self.model.to("cpu")
+        return PromptOutput(
+            status=True,
+            prompt=expanded_prompt,
+            seed=seed,
+            system_prompt=system_prompt,
+            message=json.dumps({"content": expanded_prompt},
+                               ensure_ascii=False))
