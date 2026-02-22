@@ -247,3 +247,63 @@ class DashScopePromptExpander(PromptExpander):
             system_prompt=system_prompt,
             message=str(exception) if not status else json.dumps(
                 response, ensure_ascii=False))
+
+
+class QwenPromptExpander(PromptExpander):
+    model_dict = {
+        "QwenVL2.5_3B": "Qwen/Qwen2.5-VL-3B-Instruct",
+        "QwenVL2.5_7B": "Qwen/Qwen2.5-VL-7B-Instruct",
+        "Qwen2.5_3B": "Qwen/Qwen2.5-3B-Instruct",
+        "Qwen2.5_7B": "Qwen/Qwen2.5-7B-Instruct",
+        "Qwen2.5_14B": "Qwen/Qwen2.5-14B-Instruct",
+    }
+
+    def __init__(self,
+                 model_name=None,
+                 task=None,
+                 device=0,
+                 is_vl=False,
+                 **kwargs):
+        """Initialize Qwen prompt expander with local or HuggingFace model."""
+        if model_name is None:
+            model_name = 'Qwen2.5_14B' if not is_vl else 'QwenVL2.5_7B'
+        super().__init__(model_name, task, is_vl, device, **kwargs)
+        if (not os.path.exists(self.model_name)) and (self.model_name
+                                                      in self.model_dict):
+            self.model_name = self.model_dict[self.model_name]
+
+        if self.is_vl:
+            from transformers import (
+                AutoProcessor,
+                AutoTokenizer,
+                Qwen2_5_VLForConditionalGeneration,
+            )
+            try:
+                from .qwen_vl_utils import process_vision_info
+            except:
+                from qwen_vl_utils import process_vision_info
+            self.process_vision_info = process_vision_info
+            min_pixels = 256 * 28 * 28
+            max_pixels = 1280 * 28 * 28
+            self.processor = AutoProcessor.from_pretrained(
+                self.model_name,
+                min_pixels=min_pixels,
+                max_pixels=max_pixels,
+                use_fast=True)
+            self.model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+                self.model_name,
+                torch_dtype=torch.bfloat16 if FLASH_VER == 2 else
+                torch.float16 if "AWQ" in self.model_name else "auto",
+                attn_implementation="flash_attention_2"
+                if FLASH_VER == 2 else None,
+                device_map="cpu")
+        else:
+            from transformers import AutoModelForCausalLM, AutoTokenizer
+            self.model = AutoModelForCausalLM.from_pretrained(
+                self.model_name,
+                torch_dtype=torch.float16
+                if "AWQ" in self.model_name else "auto",
+                attn_implementation="flash_attention_2"
+                if FLASH_VER == 2 else None,
+                device_map="cpu")
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
