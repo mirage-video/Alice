@@ -33,6 +33,15 @@ def _validate_args(args):
     if args.prompt is None:
         args.prompt = EXAMPLE_PROMPT[args.task]["prompt"]
 
+    cfg = ALICE_CONFIGS[args.task]
+
+    if args.frame_num is None:
+        args.frame_num = cfg.frame_num
+
+    assert args.size in SUPPORTED_SIZES[
+        args.
+        task], f"Unsupport size {args.size} for task {args.task}, supported sizes are: {', '.join(SUPPORTED_SIZES[args.task])}"
+
 
 def _parse_args():
     parser = argparse.ArgumentParser(
@@ -44,6 +53,19 @@ def _parse_args():
         default="t2v-14b",
         choices=list(ALICE_CONFIGS.keys()),
         help="The task to run.")
+    parser.add_argument(
+        "--size",
+        type=str,
+        default="1280*720",
+        choices=list(SIZE_CONFIGS.keys()),
+        help="The area (width*height) of the generated video."
+    )
+    parser.add_argument(
+        "--frame_num",
+        type=int,
+        default=None,
+        help="How many frames of video are generated. The number should be 4n+1"
+    )
     parser.add_argument(
         "--ckpt_dir",
         type=str,
