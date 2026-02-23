@@ -38,6 +38,22 @@ def _parse_args():
     parser = argparse.ArgumentParser(
         description="Generate a video from a text prompt using Alice"
     )
+    parser.add_argument(
+        "--task",
+        type=str,
+        default="t2v-14b",
+        choices=list(ALICE_CONFIGS.keys()),
+        help="The task to run.")
+    parser.add_argument(
+        "--ckpt_dir",
+        type=str,
+        default=None,
+        help="The path to the checkpoint directory.")
+    parser.add_argument(
+        "--prompt",
+        type=str,
+        default=None,
+        help="The prompt to generate the video from.")
 
     args = parser.parse_args()
     _validate_args(args)
