@@ -25,5 +25,25 @@ EXAMPLE_PROMPT = {
 }
 
 
+def _validate_args(args):
+    assert args.ckpt_dir is not None, "Please specify the checkpoint directory."
+    assert args.task in ALICE_CONFIGS, f"Unsupport task: {args.task}"
+    assert args.task in EXAMPLE_PROMPT, f"Unsupport task: {args.task}"
+
+    if args.prompt is None:
+        args.prompt = EXAMPLE_PROMPT[args.task]["prompt"]
+
+
+def _parse_args():
+    parser = argparse.ArgumentParser(
+        description="Generate a video from a text prompt using Alice"
+    )
+
+    args = parser.parse_args()
+    _validate_args(args)
+
+    return args
+
+
 if __name__ == "__main__":
-    pass
+    args = _parse_args()
