@@ -76,6 +76,31 @@ def _parse_args():
         type=str,
         default=None,
         help="The prompt to generate the video from.")
+    parser.add_argument(
+        "--ulysses_size",
+        type=int,
+        default=1,
+        help="The size of the ulysses parallelism in DiT.")
+    parser.add_argument(
+        "--t5_fsdp",
+        action="store_true",
+        default=False,
+        help="Whether to use FSDP for T5.")
+    parser.add_argument(
+        "--t5_cpu",
+        action="store_true",
+        default=False,
+        help="Whether to place T5 model on CPU.")
+    parser.add_argument(
+        "--dit_fsdp",
+        action="store_true",
+        default=False,
+        help="Whether to use FSDP for DiT.")
+    parser.add_argument(
+        "--save_file",
+        type=str,
+        default=None,
+        help="The file to save the generated video to.")
 
     args = parser.parse_args()
     _validate_args(args)
