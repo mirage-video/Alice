@@ -1,4 +1,5 @@
 import argparse
+import binascii
 import logging
 import os
 import os.path as osp
@@ -10,6 +11,15 @@ import torchvision
 __all__ = ['save_video', 'save_image', 'str2bool']
 
 
+def rand_name(length=8, suffix=''):
+    name = binascii.b2a_hex(os.urandom(length)).decode('utf-8')
+    if suffix:
+        if not suffix.startswith('.'):
+            suffix = '.' + suffix
+        name += suffix
+    return name
+
+
 def save_video(tensor,
                save_file=None,
                fps=30,
@@ -17,6 +27,8 @@ def save_video(tensor,
                nrow=8,
                normalize=True,
                value_range=(-1, 1)):
+    cache_file = osp.join('/tmp', rand_name(
+        suffix=suffix)) if save_file is None else save_file
 
     try:
         tensor = tensor.clamp(min(value_range), max(value_range))
@@ -29,7 +41,7 @@ def save_video(tensor,
         tensor = (tensor * 255).type(torch.uint8).cpu()
 
         writer = imageio.get_writer(
-            save_file, fps=fps, codec='libx264', quality=8)
+            cache_file, fps=fps, codec='libx264', quality=8)
         for frame in tensor.numpy():
             writer.append_data(frame)
         writer.close()
