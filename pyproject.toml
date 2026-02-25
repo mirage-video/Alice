@@ -40,6 +40,9 @@ dev = [
     "huggingface-hub[cli]"
 ]
 
+[project.urls]
+huggingface = "https://huggingface.co/gomirageai/Mirage-T2V-14B-MoE"
+
 [tool.setuptools]
 packages = ["alice"]
 
