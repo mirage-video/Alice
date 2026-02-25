@@ -397,3 +397,109 @@ class QwenPromptExpander(PromptExpander):
             system_prompt=system_prompt,
             message=json.dumps({"content": expanded_prompt},
                                ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[%(asctime)s] %(levelname)s: %(message)s",
+        handlers=[logging.StreamHandler(stream=sys.stdout)])
+
+    seed = 100
+    prompt = "夏日海滩度假风格，一只戴着墨镜的白色猫咪坐在冲浪板上。猫咪毛发蓬松，表情悠闲，直视镜头。背景是模糊的海滩景色，海水清澈，远处有绿色的山丘和蓝天白云。猫咪的姿态自然放松，仿佛在享受海风和阳光。近景特写，强调猫咪的细节和海滩的清新氛围。"
+    en_prompt = "Summer beach vacation style, a white cat wearing sunglasses sits on a surfboard. The fluffy-furred feline gazes directly at the camera with a relaxed expression. Blurred beach scenery forms the background featuring crystal-clear waters, distant green hills, and a blue sky dotted with white clouds. The cat assumes a naturally relaxed posture, as if savoring the sea breeze and warm sunlight. A close-up shot highlights the feline's intricate details and the refreshing atmosphere of the seaside."
+    image = "./examples/i2v_input.JPG"
+
+    def test(method,
+             prompt,
+             model_name,
+             task,
+             image=None,
+             en_prompt=None,
+             seed=None):
+        prompt_expander = method(
+            model_name=model_name, task=task, is_vl=image is not None)
+        result = prompt_expander(prompt, image=image, tar_lang="zh")
+        logging.info(f"zh prompt -> zh: {result.prompt}")
+        result = prompt_expander(prompt, image=image, tar_lang="en")
+        logging.info(f"zh prompt -> en: {result.prompt}")
+        if en_prompt is not None:
+            result = prompt_expander(en_prompt, image=image, tar_lang="zh")
+            logging.info(f"en prompt -> zh: {result.prompt}")
+            result = prompt_expander(en_prompt, image=image, tar_lang="en")
+            logging.info(f"en prompt -> en: {result.prompt}")
+
+    ds_model_name = None
+    ds_vl_model_name = None
+    qwen_model_name = None
+    qwen_vl_model_name = None
+
+    for task in ["t2v-A14B", "i2v-A14B", "ti2v-5B"]:
+        if "t2v" in task or "ti2v" in task:
+            logging.info(f"-" * 40)
+            logging.info(f"Testing {task} dashscope prompt extend")
+            test(
+                DashScopePromptExpander,
+                prompt,
+                ds_model_name,
+                task,
+                image=None,
+                en_prompt=en_prompt,
+                seed=seed)
+
+            logging.info(f"-" * 40)
+            logging.info(f"Testing {task} qwen prompt extend")
+            test(
+                QwenPromptExpander,
+                prompt,
+                qwen_model_name,
+                task,
+                image=None,
+                en_prompt=en_prompt,
+                seed=seed)
+
+        if "i2v" in task:
+            logging.info(f"-" * 40)
+            logging.info(f"Testing {task} dashscope vl prompt extend")
+            test(
+                DashScopePromptExpander,
+                prompt,
+                ds_vl_model_name,
+                task,
+                image=image,
+                en_prompt=en_prompt,
+                seed=seed)
+
+            logging.info(f"-" * 40)
+            logging.info(f"Testing {task} qwen vl prompt extend")
+            test(
+                QwenPromptExpander,
+                prompt,
+                qwen_vl_model_name,
+                task,
+                image=image,
+                en_prompt=en_prompt,
+                seed=seed)
+
+        if "i2v-A14B" in task:
+            logging.info(f"-" * 40)
+            logging.info(f"Testing {task} dashscope vl empty prompt extend")
+            test(
+                DashScopePromptExpander,
+                "",
+                ds_vl_model_name,
+                task,
+                image=image,
+                en_prompt=None,
+                seed=seed)
+
+            logging.info(f"-" * 40)
+            logging.info(f"Testing {task} qwen vl empty prompt extend")
+            test(
+                QwenPromptExpander,
+                "",
+                qwen_vl_model_name,
+                task,
+                image=image,
+                en_prompt=None,
+                seed=seed)
