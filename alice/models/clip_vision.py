@@ -42,5 +42,24 @@ class CLIPAttention(nn.Module):
         return self.out_proj(attn)
 
 
+class CLIPEncoderLayer(nn.Module):
+
+    def __init__(self, dim: int, num_heads: int, mlp_ratio: float = 4.0, dropout: float = 0.0):
+        super().__init__()
+        self.ln_1 = nn.LayerNorm(dim)
+        self.attn = CLIPAttention(dim, num_heads, dropout)
+        self.ln_2 = nn.LayerNorm(dim)
+        self.mlp = nn.Sequential(OrderedDict([
+            ('c_fc', nn.Linear(dim, int(dim * mlp_ratio))),
+            ('gelu', QuickGELU()),
+            ('c_proj', nn.Linear(int(dim * mlp_ratio), dim)),
+        ]))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x + self.attn(self.ln_1(x))
+        x = x + self.mlp(self.ln_2(x))
+        return x
+
+
 class CLIPVisionEncoder:
     pass
