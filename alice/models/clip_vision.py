@@ -83,7 +83,7 @@ class CLIPVisionTransformer(nn.Module):
             3, dim, kernel_size=patch_size, stride=patch_size, bias=False)
         self.class_embedding = nn.Parameter(torch.randn(dim) * 0.02)
         self.positional_embedding = nn.Parameter(
-            torch.randn(self.num_patches, dim) * 0.01)
+            torch.randn(self.num_patches + 1, dim) * 0.01)
         self.ln_pre = nn.LayerNorm(dim)
         self.layers = nn.Sequential(*[
             CLIPEncoderLayer(dim, num_heads, mlp_ratio, dropout)
