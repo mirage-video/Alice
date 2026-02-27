@@ -106,5 +106,25 @@ class CLIPVisionTransformer(nn.Module):
         return x
 
 
+class CLIPImageProcessor:
+
+    def __init__(self, image_size: int = 224):
+        self.image_size = image_size
+        self.mean = torch.tensor([0.48145466, 0.4578275, 0.40821073])
+        self.std = torch.tensor([0.26862954, 0.26130258, 0.27577711])
+
+    def __call__(self, images: torch.Tensor) -> torch.Tensor:
+        if images.ndim == 3:
+            images = images.unsqueeze(0)
+        images = F.interpolate(
+            images, size=(self.image_size, self.image_size),
+            mode='bicubic', align_corners=False, antialias=True)
+        images = images.clamp(0, 1)
+        mean = self.mean.to(images.device).view(1, 3, 1, 1)
+        std = self.std.to(images.device).view(1, 3, 1, 1)
+        images = (images - mean) / std
+        return images
+
+
 class CLIPVisionEncoder:
     pass
