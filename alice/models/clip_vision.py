@@ -126,5 +126,21 @@ class CLIPImageProcessor:
         return images
 
 
+CLIP_CONFIGS = {
+    'ViT-L/14': dict(
+        image_size=224, patch_size=14, dim=1024,
+        num_layers=24, num_heads=16, mlp_ratio=4.0,
+    ),
+    'ViT-H/14': dict(
+        image_size=224, patch_size=14, dim=1280,
+        num_layers=32, num_heads=16, mlp_ratio=4.0,
+    ),
+    'ViT-bigG/14': dict(
+        image_size=224, patch_size=14, dim=1664,
+        num_layers=48, num_heads=16, mlp_ratio=4.9231,
+    ),
+}
+
+
 class CLIPVisionEncoder:
     pass
