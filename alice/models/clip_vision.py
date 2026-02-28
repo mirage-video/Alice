@@ -167,7 +167,15 @@ class CLIPVisionEncoder:
         if pretrained_path is not None:
             logging.info(f'Loading CLIP vision encoder from {pretrained_path}')
             state_dict = torch.load(pretrained_path, map_location='cpu')
-            self.model.load_state_dict(state_dict, assign=True)
+            if 'model' in state_dict:
+                state_dict = state_dict['model']
+            self.model.load_state_dict(
+                {k.replace('visual.', ''): v for k, v in state_dict.items()
+                 if k.startswith('visual.')},
+                assign=True)
+            if 'projection' in state_dict:
+                self.projection.load_state_dict(
+                    {'weight': state_dict['projection']}, assign=True)
 
         self.model.eval().requires_grad_(False).to(dtype).to(device)
         self.projection.eval().requires_grad_(False).to(dtype).to(device)
