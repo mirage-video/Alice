@@ -143,4 +143,31 @@ CLIP_CONFIGS = {
 
 
 class CLIPVisionEncoder:
-    pass
+
+    def __init__(
+        self,
+        model_name: str = 'ViT-L/14',
+        pretrained_path: Optional[str] = None,
+        projection_dim: int = 5120,
+        dtype: torch.dtype = torch.float16,
+        device: str = 'cuda',
+    ):
+        self.dtype = dtype
+        self.device = device
+        self.model_name = model_name
+
+        cfg = CLIP_CONFIGS[model_name]
+        self.processor = CLIPImageProcessor(cfg['image_size'])
+
+        with torch.device('meta'):
+            self.model = CLIPVisionTransformer(**cfg)
+
+        self.projection = nn.Linear(cfg['dim'], projection_dim, bias=False)
+
+        if pretrained_path is not None:
+            logging.info(f'Loading CLIP vision encoder from {pretrained_path}')
+            state_dict = torch.load(pretrained_path, map_location='cpu')
+            self.model.load_state_dict(state_dict, assign=True)
+
+        self.model.eval().requires_grad_(False).to(dtype).to(device)
+        self.projection.eval().requires_grad_(False).to(dtype).to(device)
