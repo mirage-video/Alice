@@ -171,3 +171,14 @@ class CLIPVisionEncoder:
 
         self.model.eval().requires_grad_(False).to(dtype).to(device)
         self.projection.eval().requires_grad_(False).to(dtype).to(device)
+
+    def encode_image(self, images: torch.Tensor) -> torch.Tensor:
+        images = self.processor(images).to(self.dtype).to(self.device)
+        features = self.model(images)
+        cls_feature = features[:, 0]
+        patch_features = features[:, 1:]
+        projected = self.projection(patch_features)
+        return projected, cls_feature
+
+    def __call__(self, images: torch.Tensor) -> torch.Tensor:
+        return self.encode_image(images)
