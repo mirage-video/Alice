@@ -3,9 +3,11 @@ import os
 os.environ['TOKENIZERS_PARALLELISM'] = 'false'
 
 from .t2v_14b import t2v_14b
+from .i2v_14b import i2v_14b
 
 ALICE_CONFIGS = {
     't2v-14b': t2v_14b,
+    'i2v-14b': i2v_14b,
 }
 
 SIZE_CONFIGS = {
