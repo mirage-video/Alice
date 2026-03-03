@@ -125,3 +125,34 @@ class AliceImageToVideo:
                 model.to(self.device)
 
         return model
+
+    def _prepare_model_for_timestep(self, t, boundary, offload_model):
+        if t.item() >= boundary:
+            required_model_name = 'high_noise_model'
+            offload_model_name = 'low_noise_model'
+        else:
+            required_model_name = 'low_noise_model'
+            offload_model_name = 'high_noise_model'
+        if offload_model or self.init_on_cpu:
+            if next(getattr(
+                    self,
+                    offload_model_name).parameters()).device.type == 'cuda':
+                getattr(self, offload_model_name).to('cpu')
+            if next(getattr(
+                    self,
+                    required_model_name).parameters()).device.type == 'cpu':
+                getattr(self, required_model_name).to(self.device)
+        return getattr(self, required_model_name)
+
+    def _encode_reference_image(self, image, size):
+        if image.dim() == 3:
+            image = image.unsqueeze(0)
+        if image.shape[-2:] != size:
+            image = torch.nn.functional.interpolate(
+                image, size=size, mode='bicubic',
+                align_corners=False)
+        clip_features, _ = self.clip_encoder.encode_image(image)
+
+        image_latent = image.unsqueeze(2)
+        vae_latent = self.vae.encode([image_latent.squeeze(0)])[0]
+        return clip_features, vae_latent
