@@ -102,3 +102,26 @@ class AliceImageToVideo:
             self.sp_size = 1
 
         self.sample_neg_prompt = config.sample_neg_prompt
+
+    def _configure_model(self, model, use_sp, dit_fsdp, shard_fn,
+                         convert_model_dtype):
+        model.eval().requires_grad_(False)
+
+        if use_sp:
+            for block in model.blocks:
+                block.self_attn.forward = types.MethodType(
+                    sp_attn_forward, block.self_attn)
+            model.forward = types.MethodType(sp_dit_forward, model)
+
+        if dist.is_initialized():
+            dist.barrier()
+
+        if dit_fsdp:
+            model = shard_fn(model)
+        else:
+            if convert_model_dtype:
+                model.to(self.param_dtype)
+            if not self.init_on_cpu:
+                model.to(self.device)
+
+        return model
