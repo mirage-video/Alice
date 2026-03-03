@@ -29,4 +29,76 @@ from .scheduler_unipc import FlowUniPCMultistepScheduler
 
 
 class AliceImageToVideo:
-    pass
+
+    def __init__(
+        self,
+        config,
+        checkpoint_dir,
+        device_id=0,
+        rank=0,
+        t5_fsdp=False,
+        dit_fsdp=False,
+        use_sp=False,
+        t5_cpu=False,
+        init_on_cpu=True,
+        convert_model_dtype=False,
+    ):
+        self.device = torch.device(f"cuda:{device_id}")
+        self.config = config
+        self.rank = rank
+        self.t5_cpu = t5_cpu
+        self.init_on_cpu = init_on_cpu
+
+        self.num_train_timesteps = config.num_train_timesteps
+        self.boundary = config.boundary
+        self.param_dtype = config.param_dtype
+
+        if t5_fsdp or dit_fsdp or use_sp:
+            self.init_on_cpu = False
+
+        shard_fn = partial(shard_model, device_id=device_id)
+        self.text_encoder = T5EncoderModel(
+            text_len=config.text_len,
+            dtype=config.t5_dtype,
+            device=torch.device('cpu'),
+            checkpoint_path=os.path.join(checkpoint_dir, config.t5_checkpoint),
+            tokenizer_path=os.path.join(checkpoint_dir, config.t5_tokenizer),
+            shard_fn=shard_fn if t5_fsdp else None)
+
+        self.clip_encoder = CLIPVisionEncoder(
+            model_name=config.clip_model,
+            pretrained_path=os.path.join(checkpoint_dir, config.clip_checkpoint),
+            projection_dim=config.clip_projection_dim,
+            dtype=config.param_dtype,
+            device=self.device)
+
+        self.vae_stride = config.vae_stride
+        self.patch_size = config.patch_size
+        self.vae = AliceVAE(
+            vae_pth=os.path.join(checkpoint_dir, config.vae_checkpoint),
+            device=self.device)
+
+        logging.info(f"Creating AliceTransformer (I2V) from {checkpoint_dir}")
+        self.low_noise_model = AliceTransformer.from_pretrained(
+            checkpoint_dir, subfolder=config.low_noise_checkpoint)
+        self.low_noise_model = self._configure_model(
+            model=self.low_noise_model,
+            use_sp=use_sp,
+            dit_fsdp=dit_fsdp,
+            shard_fn=shard_fn,
+            convert_model_dtype=convert_model_dtype)
+
+        self.high_noise_model = AliceTransformer.from_pretrained(
+            checkpoint_dir, subfolder=config.high_noise_checkpoint)
+        self.high_noise_model = self._configure_model(
+            model=self.high_noise_model,
+            use_sp=use_sp,
+            dit_fsdp=dit_fsdp,
+            shard_fn=shard_fn,
+            convert_model_dtype=convert_model_dtype)
+        if use_sp:
+            self.sp_size = get_world_size()
+        else:
+            self.sp_size = 1
+
+        self.sample_neg_prompt = config.sample_neg_prompt
