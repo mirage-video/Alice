@@ -214,7 +214,7 @@ class AliceImageToVideo:
                 generator=seed_g)
         ]
 
-        noise[0][:, 0] = ref_latent
+        noise[0][:, :1] = ref_latent
 
         @contextmanager
         def noop_no_sync():
