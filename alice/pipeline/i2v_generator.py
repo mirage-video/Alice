@@ -257,7 +257,7 @@ class AliceImageToVideo:
             latents = noise
 
             arg_c = {'context': context, 'seq_len': seq_len, 'y': [clip_features]}
-            arg_null = {'context': context_null, 'seq_len': seq_len}
+            arg_null = {'context': context_null, 'seq_len': seq_len, 'y': [clip_features]}
 
             for _, t in enumerate(tqdm(timesteps)):
                 latent_model_input = latents
