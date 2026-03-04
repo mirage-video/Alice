@@ -156,3 +156,150 @@ class AliceImageToVideo:
         image_latent = image.unsqueeze(2)
         vae_latent = self.vae.encode([image_latent.squeeze(0)])[0]
         return clip_features, vae_latent
+
+    def generate(
+        self,
+        input_prompt,
+        input_image,
+        size=(1280, 720),
+        frame_num=81,
+        shift=5.0,
+        sample_solver='unipc',
+        sampling_steps=50,
+        guide_scale=5.0,
+        n_prompt="",
+        seed=-1,
+        offload_model=True,
+    ):
+        guide_scale = (guide_scale, guide_scale) if isinstance(
+            guide_scale, float) else guide_scale
+        F = frame_num
+        target_shape = (self.vae.model.z_dim, (F - 1) // self.vae_stride[0] + 1,
+                        size[1] // self.vae_stride[1],
+                        size[0] // self.vae_stride[2])
+
+        seq_len = math.ceil((target_shape[2] * target_shape[3]) /
+                            (self.patch_size[1] * self.patch_size[2]) *
+                            target_shape[1] / self.sp_size) * self.sp_size
+
+        if n_prompt == "":
+            n_prompt = self.sample_neg_prompt
+        seed = seed if seed >= 0 else random.randint(0, sys.maxsize)
+        seed_g = torch.Generator(device=self.device)
+        seed_g.manual_seed(seed)
+
+        clip_features, ref_latent = self._encode_reference_image(
+            input_image.to(self.device), (size[1], size[0]))
+
+        if not self.t5_cpu:
+            self.text_encoder.model.to(self.device)
+            context = self.text_encoder([input_prompt], self.device)
+            context_null = self.text_encoder([n_prompt], self.device)
+            if offload_model:
+                self.text_encoder.model.cpu()
+        else:
+            context = self.text_encoder([input_prompt], torch.device('cpu'))
+            context_null = self.text_encoder([n_prompt], torch.device('cpu'))
+            context = [t.to(self.device) for t in context]
+            context_null = [t.to(self.device) for t in context_null]
+
+        noise = [
+            torch.randn(
+                target_shape[0],
+                target_shape[1],
+                target_shape[2],
+                target_shape[3],
+                dtype=torch.float32,
+                device=self.device,
+                generator=seed_g)
+        ]
+
+        noise[0][:, 0] = ref_latent
+
+        @contextmanager
+        def noop_no_sync():
+            yield
+
+        no_sync_low_noise = getattr(self.low_noise_model, 'no_sync',
+                                    noop_no_sync)
+        no_sync_high_noise = getattr(self.high_noise_model, 'no_sync',
+                                     noop_no_sync)
+
+        with (
+                torch.amp.autocast('cuda', dtype=self.param_dtype),
+                torch.no_grad(),
+                no_sync_low_noise(),
+                no_sync_high_noise(),
+        ):
+            boundary = self.boundary * self.num_train_timesteps
+
+            if sample_solver == 'unipc':
+                sample_scheduler = FlowUniPCMultistepScheduler(
+                    num_train_timesteps=self.num_train_timesteps,
+                    shift=1,
+                    use_dynamic_shifting=False)
+                sample_scheduler.set_timesteps(
+                    sampling_steps, device=self.device, shift=shift)
+                timesteps = sample_scheduler.timesteps
+            elif sample_solver == 'dpm++':
+                sample_scheduler = FlowDPMSolverMultistepScheduler(
+                    num_train_timesteps=self.num_train_timesteps,
+                    shift=1,
+                    use_dynamic_shifting=False)
+                sampling_sigmas = get_sampling_sigmas(sampling_steps, shift)
+                timesteps, _ = retrieve_timesteps(
+                    sample_scheduler,
+                    device=self.device,
+                    sigmas=sampling_sigmas)
+            else:
+                raise NotImplementedError("Unsupported solver.")
+
+            latents = noise
+
+            arg_c = {'context': context, 'seq_len': seq_len, 'y': [clip_features]}
+            arg_null = {'context': context_null, 'seq_len': seq_len}
+
+            for _, t in enumerate(tqdm(timesteps)):
+                latent_model_input = latents
+                timestep = [t]
+
+                timestep = torch.stack(timestep)
+
+                model = self._prepare_model_for_timestep(
+                    t, boundary, offload_model)
+                sample_guide_scale = guide_scale[1] if t.item(
+                ) >= boundary else guide_scale[0]
+
+                noise_pred_cond = model(
+                    latent_model_input, t=timestep, **arg_c)[0]
+                noise_pred_uncond = model(
+                    latent_model_input, t=timestep, **arg_null)[0]
+
+                noise_pred = noise_pred_uncond + sample_guide_scale * (
+                    noise_pred_cond - noise_pred_uncond)
+
+                temp_x0 = sample_scheduler.step(
+                    noise_pred.unsqueeze(0),
+                    t,
+                    latents[0].unsqueeze(0),
+                    return_dict=False,
+                    generator=seed_g)[0]
+                latents = [temp_x0.squeeze(0)]
+
+            x0 = latents
+            if offload_model:
+                self.low_noise_model.cpu()
+                self.high_noise_model.cpu()
+                torch.cuda.empty_cache()
+            if self.rank == 0:
+                videos = self.vae.decode(x0)
+
+        del noise, latents
+        del sample_scheduler
+        if offload_model:
+            gc.collect()
+            torch.cuda.synchronize()
+        if dist.is_initialized():
+            dist.barrier()
+
+        return videos[0] if self.rank == 0 else None
