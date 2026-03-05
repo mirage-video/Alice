@@ -1,4 +1,5 @@
 from .generator import AliceTextToVideo
+from .i2v_generator import AliceImageToVideo
 from .scheduler_dpm import (
     FlowDPMSolverMultistepScheduler,
     get_sampling_sigmas,
@@ -8,6 +9,7 @@ from .scheduler_unipc import FlowUniPCMultistepScheduler
 
 __all__ = [
     'AliceTextToVideo',
+    'AliceImageToVideo',
     'FlowDPMSolverMultistepScheduler',
     'FlowUniPCMultistepScheduler',
     'get_sampling_sigmas',
