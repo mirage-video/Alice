@@ -4,6 +4,7 @@ from .tokenizers import HuggingfaceTokenizer
 from .transformer import AliceTransformer
 from .vae import AliceVAE
 from .vae22 import AliceVAE22
+from .clip_vision import CLIPVisionEncoder
 
 __all__ = [
     'AliceVAE',
@@ -16,4 +17,5 @@ __all__ = [
     'flash_attention',
     'attention',
     'AliceTransformer',
+    'CLIPVisionEncoder',
 ]
