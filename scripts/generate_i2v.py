@@ -203,5 +203,15 @@ def _init_logging(rank):
         logging.basicConfig(level=logging.ERROR)
 
 
+def _load_image(image_path: str) -> torch.Tensor:
+    from torchvision import transforms
+    image = Image.open(image_path).convert('RGB')
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+    ])
+    return transform(image)
+
+
 if __name__ == "__main__":
     args = _parse_args()
