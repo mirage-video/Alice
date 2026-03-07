@@ -150,7 +150,7 @@ class AliceImageToVideo:
         if image.shape[-2:] != size:
             image = torch.nn.functional.interpolate(
                 image, size=size, mode='bicubic',
-                align_corners=False)
+                align_corners=False, antialias=True)
         clip_features, _ = self.clip_encoder.encode_image(image)
 
         image_latent = image.unsqueeze(2)
