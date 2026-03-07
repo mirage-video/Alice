@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from einops import rearrange
 
 
-__all__ = []
+__all__ = ['CLIPVisionEncoder']
 
 
 class QuickGELU(nn.Module):
