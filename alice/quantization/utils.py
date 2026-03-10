@@ -39,3 +39,20 @@ def per_channel_quantize(
     quantized = (tensor.float() / scales).clamp(-qmax, qmax).to(dtype)
 
     return quantized, scales.reshape(-1)
+
+
+def get_fp8_info() -> dict:
+    e4m3 = torch.finfo(torch.float8_e4m3fn)
+    e5m2 = torch.finfo(torch.float8_e5m2)
+    return {
+        'e4m3fn': {
+            'max': e4m3.max,
+            'min': e4m3.min,
+            'smallest_normal': e4m3.tiny,
+        },
+        'e5m2': {
+            'max': e5m2.max,
+            'min': e5m2.min,
+            'smallest_normal': e5m2.tiny,
+        },
+    }
