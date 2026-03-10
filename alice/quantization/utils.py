@@ -56,3 +56,22 @@ def get_fp8_info() -> dict:
             'smallest_normal': e5m2.tiny,
         },
     }
+
+
+def estimate_quantization_error(
+    tensor: torch.Tensor,
+    scale: torch.Tensor,
+    dtype: torch.dtype = torch.float8_e4m3fn,
+) -> dict:
+    quantized = per_tensor_quantize(tensor, scale, dtype)
+    dequantized = quantized.float() * scale
+    error = (tensor.float() - dequantized)
+
+    return {
+        'mse': error.pow(2).mean().item(),
+        'mae': error.abs().mean().item(),
+        'max_error': error.abs().max().item(),
+        'snr_db': (10 * torch.log10(
+            tensor.float().pow(2).mean() / error.pow(2).mean()
+        )).item(),
+    }
