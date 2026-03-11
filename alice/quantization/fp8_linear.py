@@ -66,3 +66,9 @@ class FP8Linear(nn.Module):
             fp8.bias.data.copy_(linear.bias.data)
 
         return fp8
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        w_dequant = self.weight.float() * self.weight_scale
+
+        out = F.linear(x.float(), w_dequant, self.bias)
+        return out
