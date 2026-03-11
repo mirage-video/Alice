@@ -68,7 +68,9 @@ class FP8Linear(nn.Module):
         return fp8
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        orig_dtype = x.dtype
+
         w_dequant = self.weight.float() * self.weight_scale
 
         out = F.linear(x.float(), w_dequant, self.bias)
-        return out
+        return out.to(orig_dtype)
