@@ -74,3 +74,36 @@ class FP8Linear(nn.Module):
 
         out = F.linear(x.float(), w_dequant, self.bias)
         return out.to(orig_dtype)
+
+
+def quantize_model(
+    model: nn.Module,
+    calibration_scales: Optional[Dict[str, torch.Tensor]] = None,
+    skip_modules: Optional[list] = None,
+) -> nn.Module:
+    skip_modules = skip_modules or []
+    replaced = 0
+
+    for name, module in model.named_modules():
+        if isinstance(module, nn.Linear):
+            parent_name = '.'.join(name.split('.')[:-1])
+            child_name = name.split('.')[-1]
+
+            parent = model
+            if parent_name:
+                for part in parent_name.split('.'):
+                    parent = getattr(parent, part)
+
+            w_scale = None
+            a_scale = None
+            if calibration_scales is not None:
+                w_scale = calibration_scales.get(f'{name}.weight_scale')
+                a_scale = calibration_scales.get(f'{name}.input_scale')
+
+            fp8_linear = FP8Linear.from_linear(
+                module, weight_scale=w_scale, act_scale=a_scale)
+            setattr(parent, child_name, fp8_linear)
+            replaced += 1
+
+    logging.info(f'Quantized {replaced} linear layers to FP8')
+    return model
