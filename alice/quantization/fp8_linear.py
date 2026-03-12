@@ -85,7 +85,7 @@ def quantize_model(
     replaced = 0
 
     for name, module in model.named_modules():
-        if isinstance(module, nn.Linear):
+        if isinstance(module, nn.Linear) and name not in skip_modules:
             parent_name = '.'.join(name.split('.')[:-1])
             child_name = name.split('.')[-1]
 
