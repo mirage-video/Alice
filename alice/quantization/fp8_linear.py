@@ -107,3 +107,31 @@ def quantize_model(
 
     logging.info(f'Quantized {replaced} linear layers to FP8')
     return model
+
+
+def dequantize_model(model: nn.Module) -> nn.Module:
+    replaced = 0
+
+    for name, module in model.named_modules():
+        if isinstance(module, FP8Linear):
+            parent_name = '.'.join(name.split('.')[:-1])
+            child_name = name.split('.')[-1]
+
+            parent = model
+            if parent_name:
+                for part in parent_name.split('.'):
+                    parent = getattr(parent, part)
+
+            linear = nn.Linear(
+                module.in_features,
+                module.out_features,
+                bias=module.bias is not None)
+            linear.weight.data.copy_(
+                module.weight.float() * module.weight_scale)
+            if module.bias is not None:
+                linear.bias.data.copy_(module.bias.data)
+            setattr(parent, child_name, linear)
+            replaced += 1
+
+    logging.info(f'Dequantized {replaced} FP8 layers back to float')
+    return model
