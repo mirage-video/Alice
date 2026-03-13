@@ -9,3 +9,39 @@ from .utils import compute_scale
 
 
 FP8_MAX = torch.finfo(torch.float8_e4m3fn).max
+
+
+class CalibrationContext:
+
+    def __init__(self, model: nn.Module, num_batches: int = 32):
+        self.model = model
+        self.num_batches = num_batches
+        self._hooks = []
+        self._stats: Dict[str, List[torch.Tensor]] = defaultdict(list)
+        self._batch_count = 0
+
+    def __enter__(self):
+        for name, module in self.model.named_modules():
+            if isinstance(module, nn.Linear):
+                hook = module.register_forward_hook(
+                    self._make_hook(name))
+                self._hooks.append(hook)
+                print(f"Hook registered for {name}")
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        for hook in self._hooks:
+            hook.remove()
+
+    def _make_hook(self, name: str):
+        def hook_fn(module, input, output):
+            if self._batch_count >= self.num_batches:
+                return
+            x = input[0].detach()
+            absmax = x.abs().amax()
+            self._stats[name].append(absmax.cpu())
+        return hook_fn
+
+    def step(self):
+        self._batch_count += 1
+        print(f"Batch {self._batch_count}")
