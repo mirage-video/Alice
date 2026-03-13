@@ -45,3 +45,28 @@ class CalibrationContext:
     def step(self):
         self._batch_count += 1
         print(f"Batch {self._batch_count}")
+
+    def compute_scales(self) -> Dict[str, torch.Tensor]:
+        scales = {}
+
+        for name, absmax_list in self._stats.items():
+            if not absmax_list:
+                continue
+            absmax = torch.stack(absmax_list).max()
+            act_scale = compute_scale(
+                torch.tensor([[absmax]]), FP8_MAX)
+            scales[f'{name}.input_scale'] = act_scale
+
+        for name, module in self.model.named_modules():
+            if isinstance(module, nn.Linear):
+                w = module.weight.data.float()
+                scales[f'{name}.weight_scale'] = compute_scale(w, FP8_MAX)
+
+        logging.info(
+            f'Computed calibration scales for {len(self._stats)} layers '
+            f'over {self._batch_count} batches')
+        return scales
+
+    @property
+    def is_complete(self) -> bool:
+        return self._batch_count >= self.num_batches
