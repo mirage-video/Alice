@@ -70,3 +70,21 @@ class CalibrationContext:
     @property
     def is_complete(self) -> bool:
         return self._batch_count >= self.num_batches
+
+
+def collect_calibration_stats(
+    model: nn.Module,
+    calibration_data: List[torch.Tensor],
+    num_batches: int = 32,
+    device: str = 'cuda',
+) -> Dict[str, torch.Tensor]:
+    with CalibrationContext(model, num_batches=num_batches) as ctx:
+        for i, batch in enumerate(calibration_data):
+            if ctx.is_complete:
+                break
+            with torch.no_grad():
+                batch = batch.to(device)
+                model(batch)
+            ctx.step()
+
+    return ctx.compute_scales()
