@@ -37,6 +37,11 @@ def _parse_args():
         nargs='*',
         default=None,
         help="Module names to skip during quantization.")
+    parser.add_argument(
+        "--verify",
+        action="store_true",
+        default=False,
+        help="Run quantization error analysis on a sample of weights.")
     return parser.parse_args()
 
 
