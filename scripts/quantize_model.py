@@ -35,7 +35,7 @@ def _parse_args():
         "--skip_modules",
         type=str,
         nargs='*',
-        default=None,
+        default=['head.head', 'patch_embedding', 'text_embedding.0', 'text_embedding.2'],
         help="Module names to skip during quantization.")
     parser.add_argument(
         "--verify",
