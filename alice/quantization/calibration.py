@@ -32,6 +32,7 @@ class CalibrationContext:
     def __exit__(self, exc_type, exc_val, exc_tb):
         for hook in self._hooks:
             hook.remove()
+        self._hooks.clear()
 
     def _make_hook(self, name: str):
         def hook_fn(module, input, output):
