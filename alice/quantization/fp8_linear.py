@@ -75,6 +75,14 @@ class FP8Linear(nn.Module):
         out = F.linear(x.float(), w_dequant, self.bias)
         return out.to(orig_dtype)
 
+    def extra_repr(self) -> str:
+        return (
+            f'in_features={self.in_features}, '
+            f'out_features={self.out_features}, '
+            f'bias={self.bias is not None}, '
+            f'weight_dtype={self.weight.dtype}'
+        )
+
 
 def quantize_model(
     model: nn.Module,
