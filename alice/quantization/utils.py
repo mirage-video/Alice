@@ -10,6 +10,7 @@ def compute_scale(
 ) -> torch.Tensor:
     absmax = tensor.abs().amax().float()
     scale = absmax / qmax
+    scale = scale.clamp(min=min_scale)
     return scale
 
 
