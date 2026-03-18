@@ -42,23 +42,6 @@ def per_channel_quantize(
     return quantized, scales.reshape(-1)
 
 
-def get_fp8_info() -> dict:
-    e4m3 = torch.finfo(torch.float8_e4m3fn)
-    e5m2 = torch.finfo(torch.float8_e5m2)
-    return {
-        'e4m3fn': {
-            'max': e4m3.max,
-            'min': e4m3.min,
-            'smallest_normal': e4m3.tiny,
-        },
-        'e5m2': {
-            'max': e5m2.max,
-            'min': e5m2.min,
-            'smallest_normal': e5m2.tiny,
-        },
-    }
-
-
 def estimate_quantization_error(
     tensor: torch.Tensor,
     scale: torch.Tensor,
@@ -75,4 +58,21 @@ def estimate_quantization_error(
         'snr_db': (10 * torch.log10(
             tensor.float().pow(2).mean() / error.pow(2).mean()
         )).item(),
+    }
+
+
+def get_fp8_info() -> dict:
+    e4m3 = torch.finfo(torch.float8_e4m3fn)
+    e5m2 = torch.finfo(torch.float8_e5m2)
+    return {
+        'e4m3fn': {
+            'max': e4m3.max,
+            'min': e4m3.min,
+            'smallest_normal': e4m3.tiny,
+        },
+        'e5m2': {
+            'max': e5m2.max,
+            'min': e5m2.min,
+            'smallest_normal': e5m2.tiny,
+        },
     }

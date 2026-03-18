@@ -26,7 +26,6 @@ class CalibrationContext:
                 hook = module.register_forward_hook(
                     self._make_hook(name))
                 self._hooks.append(hook)
-                print(f"Hook registered for {name}")
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -45,7 +44,6 @@ class CalibrationContext:
 
     def step(self):
         self._batch_count += 1
-        print(f"Batch {self._batch_count}")
 
     def compute_scales(self) -> Dict[str, torch.Tensor]:
         scales = {}
