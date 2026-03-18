@@ -40,6 +40,9 @@ class FP8Linear(nn.Module):
             self.register_buffer(
                 'weight_scale', torch.ones(1, dtype=torch.float32))
 
+        self.register_buffer(
+            'input_scale', torch.ones(1, dtype=torch.float32))
+
     @classmethod
     def from_linear(
         cls,
@@ -64,6 +67,9 @@ class FP8Linear(nn.Module):
 
         if has_bias:
             fp8.bias.data.copy_(linear.bias.data)
+
+        if act_scale is not None:
+            fp8.input_scale.copy_(act_scale)
 
         return fp8
 
