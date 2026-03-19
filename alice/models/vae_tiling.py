@@ -30,5 +30,38 @@ def _compute_tile_coords(
     return coords
 
 
+def _create_blend_mask(
+    tile_h: int,
+    tile_w: int,
+    overlap_h: int,
+    overlap_w: int,
+    is_top: bool,
+    is_bottom: bool,
+    is_left: bool,
+    is_right: bool,
+    device: torch.device,
+    dtype: torch.dtype,
+) -> torch.Tensor:
+    mask = torch.ones(1, 1, 1, tile_h, tile_w, device=device, dtype=dtype)
+
+    if not is_top and overlap_h > 0:
+        ramp = torch.linspace(0, 1, overlap_h, device=device, dtype=dtype)
+        mask[:, :, :, :overlap_h, :] *= ramp.view(1, 1, 1, -1, 1)
+
+    if not is_bottom and overlap_h > 0:
+        ramp = torch.linspace(0, 1, overlap_h, device=device, dtype=dtype)
+        mask[:, :, :, -overlap_h:, :] *= ramp.view(1, 1, 1, -1, 1)
+
+    if not is_left and overlap_w > 0:
+        ramp = torch.linspace(0, 1, overlap_w, device=device, dtype=dtype)
+        mask[:, :, :, :, :overlap_w] *= ramp.view(1, 1, 1, 1, -1)
+
+    if not is_right and overlap_w > 0:
+        ramp = torch.linspace(0, 1, overlap_w, device=device, dtype=dtype)
+        mask[:, :, :, :, -overlap_w:] *= ramp.view(1, 1, 1, 1, -1)
+
+    return mask
+
+
 class TiledVAE:
     pass
