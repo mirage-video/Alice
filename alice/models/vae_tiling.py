@@ -135,3 +135,59 @@ class TiledVAE:
 
         result = result / weight.clamp(min=1e-8)
         return result.squeeze(0)
+
+    def decode_tiled(self, latent: torch.Tensor) -> torch.Tensor:
+        if latent.dim() == 4:
+            latent = latent.unsqueeze(0)
+        _, z_dim, lt, lh, lw = latent.shape
+        vae_stride = (4, 8, 8)
+
+        h = lh * vae_stride[1]
+        w = lw * vae_stride[2]
+
+        lat_tile_h = self.tile_size // vae_stride[1]
+        lat_tile_w = self.tile_size // vae_stride[2]
+        lat_overlap_h = self.tile_overlap // vae_stride[1]
+        lat_overlap_w = self.tile_overlap // vae_stride[2]
+
+        h_coords = _compute_tile_coords(lh, lat_tile_h, lat_overlap_h)
+        w_coords = _compute_tile_coords(lw, lat_tile_w, lat_overlap_w)
+
+        t = (lt - 1) * vae_stride[0] + 1
+        result = torch.zeros(
+            1, 3, t, h, w, device=latent.device, dtype=latent.dtype)
+        weight = torch.zeros(
+            1, 1, t, h, w, device=latent.device, dtype=latent.dtype)
+
+        for i, (lh_start, lh_end) in enumerate(h_coords):
+            for j, (lw_start, lw_end) in enumerate(w_coords):
+                tile_latent = latent[:, :, :, lh_start:lh_end, lw_start:lw_end]
+                tile_video = self.vae.decode([tile_latent.squeeze(0)])[0]
+                tile_video = tile_video.unsqueeze(0)
+
+                pixel_h_start = lh_start * vae_stride[1]
+                pixel_h_end = lh_end * vae_stride[1]
+                pixel_w_start = lw_start * vae_stride[2]
+                pixel_w_end = lw_end * vae_stride[2]
+
+                tile_ph = pixel_h_end - pixel_h_start
+                tile_pw = pixel_w_end - pixel_w_start
+                pixel_overlap_h = lat_overlap_h * vae_stride[1]
+                pixel_overlap_w = lat_overlap_w * vae_stride[2]
+
+                mask = _create_blend_mask(
+                    tile_ph, tile_pw,
+                    pixel_overlap_h, pixel_overlap_w,
+                    is_top=(i == 0),
+                    is_bottom=(i == len(h_coords) - 1),
+                    is_left=(j == 0),
+                    is_right=(j == len(w_coords) - 1),
+                    device=latent.device,
+                    dtype=latent.dtype)
+
+                result[:, :, :, pixel_h_start:pixel_h_end, pixel_w_start:pixel_w_end] += (
+                    tile_video * mask)
+                weight[:, :, :, pixel_h_start:pixel_h_end, pixel_w_start:pixel_w_end] += mask
+
+        result = result / weight.clamp(min=1e-8)
+        return result.squeeze(0).clamp(-1, 1)
