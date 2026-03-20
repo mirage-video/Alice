@@ -15,6 +15,9 @@ def _compute_tile_coords(
     tile_size: int,
     overlap: int,
 ) -> List[Tuple[int, int]]:
+    if total_size <= tile_size:
+        return [(0, total_size)]
+
     coords = []
     stride = tile_size - overlap
     pos = 0
