@@ -64,4 +64,17 @@ def _create_blend_mask(
 
 
 class TiledVAE:
-    pass
+
+    def __init__(
+        self,
+        vae: AliceVAE,
+        tile_size: int = 256,
+        tile_overlap: int = 32,
+        temporal_tile_size: int = 17,
+        temporal_overlap: int = 4,
+    ):
+        self.vae = vae
+        self.tile_size = tile_size
+        self.tile_overlap = tile_overlap
+        self.temporal_tile_size = temporal_tile_size
+        self.temporal_overlap = temporal_overlap
