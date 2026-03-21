@@ -194,3 +194,30 @@ class TiledVAE:
 
         result = result / weight.clamp(min=1e-8)
         return result.squeeze(0).clamp(-1, 1)
+
+    def estimate_memory(
+        self,
+        height: int,
+        width: int,
+        num_frames: int,
+        dtype: torch.dtype = torch.bfloat16,
+    ) -> dict:
+        bytes_per_elem = torch.tensor([], dtype=dtype).element_size()
+        vae_stride = (4, 8, 8)
+
+        full_pixels = 3 * num_frames * height * width * bytes_per_elem
+        full_latent = (16 * ((num_frames - 1) // vae_stride[0] + 1) *
+                       (height // vae_stride[1]) * (width // vae_stride[2]) *
+                       bytes_per_elem)
+
+        tile_pixels = (3 * num_frames * self.tile_size *
+                       self.tile_size * bytes_per_elem)
+        tile_latent = (16 * ((num_frames - 1) // vae_stride[0] + 1) *
+                       (self.tile_size // vae_stride[1]) *
+                       (self.tile_size // vae_stride[2]) * bytes_per_elem)
+
+        return {
+            'full_encode_mb': (full_pixels + full_latent) / 1024 / 1024,
+            'tiled_encode_mb': (tile_pixels + tile_latent) / 1024 / 1024,
+            'memory_saving': 1 - (tile_pixels + tile_latent) / (full_pixels + full_latent),
+        }
