@@ -52,7 +52,7 @@ def _create_blend_mask(
         mask[:, :, :, :overlap_h, :] *= ramp.view(1, 1, 1, -1, 1)
 
     if not is_bottom and overlap_h > 0:
-        ramp = torch.linspace(0, 1, overlap_h, device=device, dtype=dtype)
+        ramp = torch.linspace(1, 0, overlap_h, device=device, dtype=dtype)
         mask[:, :, :, -overlap_h:, :] *= ramp.view(1, 1, 1, -1, 1)
 
     if not is_left and overlap_w > 0:
@@ -60,7 +60,7 @@ def _create_blend_mask(
         mask[:, :, :, :, :overlap_w] *= ramp.view(1, 1, 1, 1, -1)
 
     if not is_right and overlap_w > 0:
-        ramp = torch.linspace(0, 1, overlap_w, device=device, dtype=dtype)
+        ramp = torch.linspace(1, 0, overlap_w, device=device, dtype=dtype)
         mask[:, :, :, :, -overlap_w:] *= ramp.view(1, 1, 1, 1, -1)
 
     return mask
