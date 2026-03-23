@@ -44,3 +44,9 @@ class ChunkedLatentIterator:
                 break
             pos += stride
             chunk_idx += 1
+
+    def __len__(self) -> int:
+        if self.total_frames <= self.chunk_size:
+            return 1
+        stride = self.chunk_size - self.overlap
+        return math.ceil((self.total_frames - self.chunk_size) / stride) + 1
