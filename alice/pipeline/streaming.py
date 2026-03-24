@@ -50,3 +50,19 @@ class ChunkedLatentIterator:
             return 1
         stride = self.chunk_size - self.overlap
         return math.ceil((self.total_frames - self.chunk_size) / stride) + 1
+
+
+class StreamingDecoder:
+
+    def __init__(
+        self,
+        vae: AliceVAE,
+        chunk_size: int = 8,
+        overlap: int = 2,
+        blend_frames: int = 4,
+    ):
+        self.vae = vae
+        self.chunk_size = chunk_size
+        self.overlap = overlap
+        self.blend_frames = blend_frames
+        self._temporal_stride = 4
