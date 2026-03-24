@@ -85,11 +85,12 @@ class StreamingDecoder:
 
             if prev_tail is not None:
                 blend_t = self.blend_frames
-                actual_blend = blend_t
+                actual_blend = min(blend_t, decoded.shape[1], prev_tail.shape[1])
 
                 if actual_blend > 0:
                     alpha = torch.linspace(
-                        0, 1, actual_blend
+                        0, 1, actual_blend,
+                        device=decoded.device, dtype=decoded.dtype
                     ).view(1, -1, 1, 1)
 
                     blended = (prev_tail[:, -actual_blend:] * (1 - alpha) +
