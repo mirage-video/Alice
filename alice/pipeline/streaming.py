@@ -122,3 +122,25 @@ class StreamingDecoder:
                 result_parts.append(chunks[i])
 
         return torch.cat(result_parts, dim=1).clamp(-1, 1)
+
+    def estimate_chunk_memory(
+        self,
+        height: int,
+        width: int,
+        dtype: torch.dtype = torch.bfloat16,
+    ) -> dict:
+        elem_size = torch.tensor([], dtype=dtype).element_size()
+        vae_stride = (4, 8, 8)
+        pixel_frames = (self.chunk_size - 1) * vae_stride[0] + 1
+
+        latent_mem = (16 * self.chunk_size *
+                      (height // vae_stride[1]) *
+                      (width // vae_stride[2]) * elem_size)
+        pixel_mem = 3 * pixel_frames * height * width * elem_size
+
+        return {
+            'latent_chunk_mb': latent_mem / 1024 / 1024,
+            'pixel_chunk_mb': pixel_mem / 1024 / 1024,
+            'total_chunk_mb': (latent_mem + pixel_mem) / 1024 / 1024,
+            'pixel_frames_per_chunk': pixel_frames,
+        }
