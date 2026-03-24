@@ -66,3 +66,58 @@ class StreamingDecoder:
         self.overlap = overlap
         self.blend_frames = blend_frames
         self._temporal_stride = 4
+
+    def decode_streaming(
+        self,
+        latents: torch.Tensor,
+        callback: Optional[callable] = None,
+    ) -> torch.Tensor:
+        iterator = ChunkedLatentIterator(
+            latents,
+            chunk_size=self.chunk_size,
+            overlap=self.overlap)
+
+        chunks = []
+        prev_tail = None
+
+        for chunk_latent, idx, is_last in iterator:
+            decoded = self.vae.decode([chunk_latent.squeeze(0)])[0]
+
+            if prev_tail is not None:
+                blend_t = self.blend_frames
+                actual_blend = blend_t
+
+                if actual_blend > 0:
+                    alpha = torch.linspace(
+                        0, 1, actual_blend
+                    ).view(1, -1, 1, 1)
+
+                    blended = (prev_tail[:, -actual_blend:] * (1 - alpha) +
+                               decoded[:, :actual_blend] * alpha)
+                    decoded = torch.cat([blended, decoded[:, actual_blend:]], dim=1)
+
+                chunks.append(decoded)
+            else:
+                chunks.append(decoded)
+
+            overlap_pixel_frames = self.overlap * self._temporal_stride
+            if not is_last and decoded.shape[1] > overlap_pixel_frames:
+                prev_tail = decoded[:, -overlap_pixel_frames:]
+            else:
+                prev_tail = None
+
+            if callback is not None:
+                callback(idx, decoded, is_last)
+
+        if len(chunks) == 1:
+            return chunks[0]
+
+        result_parts = [chunks[0]]
+        for i in range(1, len(chunks)):
+            trim = self.blend_frames if i < len(chunks) else 0
+            if trim > 0 and chunks[i].shape[1] > trim:
+                result_parts.append(chunks[i][:, trim:])
+            else:
+                result_parts.append(chunks[i])
+
+        return torch.cat(result_parts, dim=1).clamp(-1, 1)
