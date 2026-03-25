@@ -88,3 +88,31 @@ def estimate_inference_memory(
         'total_gb': total / 1024**3,
         'sequence_length': seq_len,
     }
+
+
+class MemoryTracker:
+
+    def __init__(self, device_id: int = 0):
+        self.device_id = device_id
+        self._snapshots = []
+        self._peak = 0
+
+    def snapshot(self, label: str = ''):
+        if not torch.cuda.is_available():
+            return
+        allocated = torch.cuda.memory_allocated(self.device_id)
+        self._peak = max(self._peak, allocated)
+        self._snapshots.append({
+            'label': label,
+            'allocated_mb': allocated / 1024 / 1024,
+            'peak_mb': self._peak / 1024 / 1024,
+        })
+
+    def report(self) -> list:
+        return self._snapshots
+
+    def reset(self):
+        self._snapshots.clear()
+        self._peak = 0
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats(self.device_id)
