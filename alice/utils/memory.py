@@ -50,3 +50,41 @@ def estimate_model_memory(
         'total_mb': total / 1024 / 1024,
         'params_count': sum(p.nelement() for p in model.parameters()),
     }
+
+
+def estimate_inference_memory(
+    height: int,
+    width: int,
+    num_frames: int,
+    model_params_b: float = 14.0,
+    dtype: torch.dtype = torch.bfloat16,
+    vae_stride: tuple = (4, 8, 8),
+    patch_size: tuple = (1, 2, 2),
+    z_dim: int = 16,
+) -> Dict[str, float]:
+    elem_size = torch.tensor([], dtype=dtype).element_size()
+
+    model_mem = model_params_b * 1e9 * elem_size
+    vae_mem = 0.1 * 1e9 * elem_size
+
+    latent_t = (num_frames - 1) // vae_stride[0] + 1
+    latent_h = height // vae_stride[1]
+    latent_w = width // vae_stride[2]
+    latent_mem = z_dim * latent_t * latent_h * latent_w * elem_size
+
+    seq_len = (latent_t * latent_h * latent_w) // (patch_size[0] * patch_size[1] * patch_size[2])
+    dim = 5120
+    kv_mem = 2 * seq_len * dim * elem_size
+
+    pixel_mem = 3 * num_frames * height * width * 4
+
+    total = model_mem + vae_mem + latent_mem + kv_mem + pixel_mem
+    return {
+        'model_gb': model_mem / 1024**3,
+        'vae_gb': vae_mem / 1024**3,
+        'latent_gb': latent_mem / 1024**3,
+        'kv_cache_gb': kv_mem / 1024**3,
+        'pixel_output_gb': pixel_mem / 1024**3,
+        'total_gb': total / 1024**3,
+        'sequence_length': seq_len,
+    }
