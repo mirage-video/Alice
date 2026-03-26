@@ -5,6 +5,15 @@ from typing import Dict, Optional
 import torch
 
 
+__all__ = [
+    'get_gpu_memory_info',
+    'estimate_model_memory',
+    'log_memory_stats',
+    'clear_gpu_memory',
+    'MemoryTracker',
+]
+
+
 def get_gpu_memory_info(device_id: int = 0) -> Dict[str, float]:
     if not torch.cuda.is_available():
         return {'total_mb': 0, 'used_mb': 0, 'free_mb': 0, 'utilization': 0}
@@ -116,6 +125,16 @@ class MemoryTracker:
         self._peak = 0
         if torch.cuda.is_available():
             torch.cuda.reset_peak_memory_stats(self.device_id)
+
+
+def log_memory_stats(prefix: str = '', device_id: int = 0):
+    info = get_gpu_memory_info(device_id)
+    logging.info(
+        f'{prefix}GPU memory: '
+        f'{info["allocated_mb"]:.0f}MB allocated, '
+        f'{info["free_mb"]:.0f}MB free, '
+        f'{info["total_mb"]:.0f}MB total '
+        f'({info["utilization"]:.1%} used)')
 
 
 def clear_gpu_memory():
