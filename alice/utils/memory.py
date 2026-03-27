@@ -99,6 +99,23 @@ def estimate_inference_memory(
     }
 
 
+def log_memory_stats(prefix: str = '', device_id: int = 0):
+    info = get_gpu_memory_info(device_id)
+    logging.info(
+        f'{prefix}GPU memory: '
+        f'{info["allocated_mb"]:.0f}MB allocated, '
+        f'{info["free_mb"]:.0f}MB free, '
+        f'{info["total_mb"]:.0f}MB total '
+        f'({info["utilization"]:.1%} used)')
+
+
+def clear_gpu_memory():
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+
+
 class MemoryTracker:
 
     def __init__(self, device_id: int = 0):
@@ -125,20 +142,3 @@ class MemoryTracker:
         self._peak = 0
         if torch.cuda.is_available():
             torch.cuda.reset_peak_memory_stats(self.device_id)
-
-
-def log_memory_stats(prefix: str = '', device_id: int = 0):
-    info = get_gpu_memory_info(device_id)
-    logging.info(
-        f'{prefix}GPU memory: '
-        f'{info["allocated_mb"]:.0f}MB allocated, '
-        f'{info["free_mb"]:.0f}MB free, '
-        f'{info["total_mb"]:.0f}MB total '
-        f'({info["utilization"]:.1%} used)')
-
-
-def clear_gpu_memory():
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()

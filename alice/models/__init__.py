@@ -5,6 +5,7 @@ from .transformer import AliceTransformer
 from .vae import AliceVAE
 from .vae22 import AliceVAE22
 from .clip_vision import CLIPVisionEncoder
+from .vae_tiling import TiledVAE
 
 __all__ = [
     'AliceVAE',
@@ -18,4 +19,5 @@ __all__ = [
     'attention',
     'AliceTransformer',
     'CLIPVisionEncoder',
+    'TiledVAE',
 ]
