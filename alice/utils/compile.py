@@ -16,6 +16,13 @@ __all__ = [
 ]
 
 
+def _check_compile_available() -> bool:
+    if not hasattr(torch, 'compile'):
+        logging.warning('torch.compile not available (requires PyTorch >= 2.0)')
+        return False
+    return True
+
+
 COMPILE_DEFAULTS = {
     'mode': 'reduce-overhead',
     'fullgraph': False,
