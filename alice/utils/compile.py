@@ -23,6 +23,31 @@ def _check_compile_available() -> bool:
     return True
 
 
+def compile_model(
+    model: nn.Module,
+    mode: str = 'reduce-overhead',
+    fullgraph: bool = False,
+    dynamic: bool = True,
+    backend: str = 'inductor',
+    disable: bool = False,
+) -> nn.Module:
+    if disable or not _check_compile_available():
+        return model
+
+    logging.info(
+        f'Compiling model with mode={mode}, backend={backend}, '
+        f'fullgraph={fullgraph}, dynamic={dynamic}')
+
+    compiled = torch.compile(
+        model,
+        mode=mode,
+        fullgraph=fullgraph,
+        dynamic=dynamic,
+        backend=backend,
+    )
+    return compiled
+
+
 COMPILE_DEFAULTS = {
     'mode': 'reduce-overhead',
     'fullgraph': False,
