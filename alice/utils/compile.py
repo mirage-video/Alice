@@ -48,6 +48,22 @@ def compile_model(
     return compiled
 
 
+def compile_vae(
+    vae_model: nn.Module,
+    mode: str = 'reduce-overhead',
+) -> nn.Module:
+    if not _check_compile_available():
+        return vae_model
+
+    vae_model.encoder = torch.compile(
+        vae_model.encoder, mode=mode, dynamic=True)
+    vae_model.decoder = torch.compile(
+        vae_model.decoder, mode=mode, dynamic=True)
+
+    logging.info('Compiled VAE encoder and decoder separately')
+    return vae_model
+
+
 COMPILE_DEFAULTS = {
     'mode': 'reduce-overhead',
     'fullgraph': False,
