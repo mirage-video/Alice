@@ -64,6 +64,28 @@ def compile_vae(
     return vae_model
 
 
+def compile_transformer(
+    transformer: nn.Module,
+    mode: str = 'reduce-overhead',
+    compile_blocks: bool = True,
+) -> nn.Module:
+    if not _check_compile_available():
+        return transformer
+
+    if compile_blocks:
+        for i, block in enumerate(transformer.blocks):
+            transformer.blocks[i] = torch.compile(
+                block, mode=mode, dynamic=True)
+        logging.info(
+            f'Compiled {len(transformer.blocks)} transformer blocks individually')
+    else:
+        transformer = torch.compile(
+            transformer, mode=mode, fullgraph=False, dynamic=True)
+        logging.info('Compiled transformer as single graph')
+
+    return transformer
+
+
 COMPILE_DEFAULTS = {
     'mode': 'reduce-overhead',
     'fullgraph': False,
