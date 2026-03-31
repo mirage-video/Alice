@@ -112,6 +112,12 @@ class DynamicShapeGuard:
         shapes.append(shape)
         return True
 
+    def report(self) -> Dict[str, int]:
+        return {name: len(shapes) for name, shapes in self._seen_shapes.items()}
+
+    def reset(self):
+        self._seen_shapes.clear()
+
 
 COMPILE_DEFAULTS = {
     'mode': 'reduce-overhead',
