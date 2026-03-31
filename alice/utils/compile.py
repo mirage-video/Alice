@@ -144,6 +144,28 @@ class GraphBreakAnalyzer:
 
         return self._graph_breaks
 
+    @staticmethod
+    def warmup(
+        compiled_model: nn.Module,
+        sample_inputs: List[Any],
+        num_warmup: int = 3,
+    ) -> float:
+        times = []
+        for i in range(num_warmup + 1):
+            inp = sample_inputs[i % len(sample_inputs)]
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            start = time.perf_counter()
+            with torch.no_grad():
+                compiled_model(inp)
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            elapsed = time.perf_counter() - start
+            if i > 0:
+                times.append(elapsed)
+
+        return sum(times) / len(times) if times else 0.0
+
 
 COMPILE_DEFAULTS = {
     'mode': 'reduce-overhead',
