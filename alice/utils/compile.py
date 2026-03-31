@@ -86,6 +86,33 @@ def compile_transformer(
     return transformer
 
 
+class DynamicShapeGuard:
+
+    def __init__(self, max_cached_shapes: int = 8):
+        self.max_cached_shapes = max_cached_shapes
+        self._seen_shapes: Dict[str, List[tuple]] = {}
+
+    def check(self, name: str, tensor: torch.Tensor) -> bool:
+        shape = tuple(tensor.shape)
+        if name not in self._seen_shapes:
+            self._seen_shapes[name] = [shape]
+            return True
+
+        shapes = self._seen_shapes[name]
+        if shape in shapes:
+            return True
+
+        if len(shapes) >= self.max_cached_shapes:
+            logging.warning(
+                f'DynamicShapeGuard: {name} has exceeded '
+                f'{self.max_cached_shapes} unique shapes. '
+                f'This may cause recompilation overhead.')
+            return False
+
+        shapes.append(shape)
+        return True
+
+
 COMPILE_DEFAULTS = {
     'mode': 'reduce-overhead',
     'fullgraph': False,
