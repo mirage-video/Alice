@@ -119,6 +119,32 @@ class DynamicShapeGuard:
         self._seen_shapes.clear()
 
 
+class GraphBreakAnalyzer:
+
+    def __init__(self):
+        self._graph_breaks = []
+
+    def analyze(self, model: nn.Module, sample_input: Any) -> List[dict]:
+        self._graph_breaks.clear()
+
+        if not _check_compile_available():
+            return []
+
+        import torch._dynamo as dynamo
+
+        try:
+            explanation = dynamo.explain(model)(sample_input)
+            if hasattr(explanation, 'graph_break_count'):
+                return [{
+                    'total_breaks': explanation.graph_break_count,
+                    'graphs': getattr(explanation, 'graph_count', 0),
+                }]
+        except Exception as e:
+            logging.warning(f'Graph break analysis failed: {e}')
+
+        return self._graph_breaks
+
+
 COMPILE_DEFAULTS = {
     'mode': 'reduce-overhead',
     'fullgraph': False,
