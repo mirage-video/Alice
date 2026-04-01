@@ -38,3 +38,20 @@ class KVCache:
             num_layers, 1, max_seq_len, num_heads, head_dim,
             dtype=dtype, device=device)
         self._seq_len = 0
+
+    def update(
+        self,
+        layer_idx: int,
+        k: torch.Tensor,
+        v: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        bsz, new_len, nh, hd = k.shape
+        end = self._seq_len + new_len
+
+        self._k_cache[layer_idx, :bsz, self._seq_len:end] = k
+        self._v_cache[layer_idx, :bsz, self._seq_len:end] = v
+
+        return (
+            self._k_cache[layer_idx, :bsz, :end],
+            self._v_cache[layer_idx, :bsz, :end],
+        )
