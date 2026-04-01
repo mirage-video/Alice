@@ -48,6 +48,13 @@ class KVCache:
         bsz, new_len, nh, hd = k.shape
         end = self._seq_len + new_len
 
+        if end > self.max_seq_len:
+            shift = end - self.max_seq_len
+            self._k_cache[:, :, :-shift] = self._k_cache[:, :, shift:].clone()
+            self._v_cache[:, :, :-shift] = self._v_cache[:, :, shift:].clone()
+            self._seq_len -= shift
+            end = self._seq_len + new_len
+
         self._k_cache[layer_idx, :bsz, self._seq_len:end] = k
         self._v_cache[layer_idx, :bsz, self._seq_len:end] = v
 
@@ -55,3 +62,19 @@ class KVCache:
             self._k_cache[layer_idx, :bsz, :end],
             self._v_cache[layer_idx, :bsz, :end],
         )
+
+    def advance(self, num_tokens: int):
+        self._seq_len += num_tokens
+
+    @property
+    def seq_len(self) -> int:
+        return self._seq_len
+
+    def reset(self):
+        self._seq_len = 0
+        self._k_cache.zero_()
+        self._v_cache.zero_()
+
+    def memory_bytes(self) -> int:
+        return (self._k_cache.nelement() * self._k_cache.element_size() +
+                self._v_cache.nelement() * self._v_cache.element_size())
