@@ -139,3 +139,30 @@ class PagedKVCache:
 
             if layer_idx == self.num_layers - 1:
                 self._current_pos += 1
+
+    def get_all(
+        self,
+        layer_idx: int,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        if not self._page_table:
+            return (
+                torch.zeros(1, 0, self.num_heads, self.head_dim,
+                            dtype=self.dtype, device=self.device),
+                torch.zeros(1, 0, self.num_heads, self.head_dim,
+                            dtype=self.dtype, device=self.device),
+            )
+
+        k_parts = []
+        v_parts = []
+        for i, page_id in enumerate(self._page_table):
+            if i == len(self._page_table) - 1:
+                end = self._current_pos % self.page_size
+            else:
+                end = self.page_size
+            k_parts.append(self._k_pages[layer_idx, page_id, :end])
+            v_parts.append(self._v_pages[layer_idx, page_id, :end])
+
+        return (
+            torch.cat(k_parts, dim=0).unsqueeze(0),
+            torch.cat(v_parts, dim=0).unsqueeze(0),
+        )
