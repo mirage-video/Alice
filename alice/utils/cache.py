@@ -78,3 +78,45 @@ class KVCache:
     def memory_bytes(self) -> int:
         return (self._k_cache.nelement() * self._k_cache.element_size() +
                 self._v_cache.nelement() * self._v_cache.element_size())
+
+
+class PagedKVCache:
+
+    def __init__(
+        self,
+        page_size: int = 256,
+        max_pages: int = 64,
+        num_heads: int = 40,
+        head_dim: int = 128,
+        num_layers: int = 40,
+        dtype: torch.dtype = torch.bfloat16,
+        device: str = 'cuda',
+    ):
+        self.page_size = page_size
+        self.max_pages = max_pages
+        self.num_heads = num_heads
+        self.head_dim = head_dim
+        self.num_layers = num_layers
+        self.dtype = dtype
+        self.device = device
+
+        self._k_pages = torch.zeros(
+            num_layers, max_pages, page_size, num_heads, head_dim,
+            dtype=dtype, device=device)
+        self._v_pages = torch.zeros(
+            num_layers, max_pages, page_size, num_heads, head_dim,
+            dtype=dtype, device=device)
+
+        self._page_table: List[int] = []
+        self._free_pages: List[int] = list(range(max_pages))
+        self._current_pos = 0
+
+    def _allocate_page(self) -> int:
+        if not self._free_pages:
+            oldest = self._page_table.pop(0)
+            self._free_pages.append(oldest)
+            logging.debug(f'Evicting page {oldest} (cache full)')
+
+        page_id = self._free_pages.pop(0)
+        self._page_table.append(page_id)
+        return page_id
