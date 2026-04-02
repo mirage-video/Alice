@@ -120,3 +120,22 @@ class PagedKVCache:
         page_id = self._free_pages.pop(0)
         self._page_table.append(page_id)
         return page_id
+
+    def append(
+        self,
+        layer_idx: int,
+        k: torch.Tensor,
+        v: torch.Tensor,
+    ):
+        bsz, seq_len, nh, hd = k.shape
+        for i in range(seq_len):
+            page_offset = self._current_pos % self.page_size
+            if page_offset == 0:
+                self._allocate_page()
+
+            page_id = self._page_table[-1]
+            self._k_pages[layer_idx, page_id, page_offset] = k[:, i]
+            self._v_pages[layer_idx, page_id, page_offset] = v[:, i]
+
+            if layer_idx == self.num_layers - 1:
+                self._current_pos += 1
