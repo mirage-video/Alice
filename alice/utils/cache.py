@@ -157,6 +157,8 @@ class PagedKVCache:
         for i, page_id in enumerate(self._page_table):
             if i == len(self._page_table) - 1:
                 end = self._current_pos % self.page_size
+                if end == 0:
+                    end = self.page_size
             else:
                 end = self.page_size
             k_parts.append(self._k_pages[layer_idx, page_id, :end])
