@@ -169,6 +169,23 @@ class PagedKVCache:
             torch.cat(v_parts, dim=0).unsqueeze(0),
         )
 
+    def reset(self):
+        self._page_table.clear()
+        self._free_pages = list(range(self.max_pages))
+        self._current_pos = 0
+
+    @property
+    def num_tokens(self) -> int:
+        return self._current_pos
+
+    @property
+    def num_allocated_pages(self) -> int:
+        return len(self._page_table)
+
+    def memory_bytes(self) -> int:
+        return (self._k_pages.nelement() * self._k_pages.element_size() +
+                self._v_pages.nelement() * self._v_pages.element_size())
+
 
 class StaticKVCache:
 
