@@ -168,3 +168,37 @@ class PagedKVCache:
             torch.cat(k_parts, dim=0).unsqueeze(0),
             torch.cat(v_parts, dim=0).unsqueeze(0),
         )
+
+
+class StaticKVCache:
+
+    def __init__(
+        self,
+        batch_size: int,
+        max_seq_len: int,
+        num_heads: int,
+        head_dim: int,
+        dtype: torch.dtype = torch.bfloat16,
+        device: str = 'cuda',
+    ):
+        self.batch_size = batch_size
+        self.max_seq_len = max_seq_len
+
+        self.k = torch.zeros(
+            batch_size, max_seq_len, num_heads, head_dim,
+            dtype=dtype, device=device)
+        self.v = torch.zeros(
+            batch_size, max_seq_len, num_heads, head_dim,
+            dtype=dtype, device=device)
+        self._len = 0
+
+    def update(self, k: torch.Tensor, v: torch.Tensor):
+        new_len = k.shape[1]
+        end = self._len + new_len
+        self.k[:, self._len:end] = k
+        self.v[:, self._len:end] = v
+        self._len = end
+        return self.k[:, :end], self.v[:, :end]
+
+    def reset(self):
+        self._len = 0
