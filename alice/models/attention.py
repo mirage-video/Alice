@@ -1,3 +1,4 @@
+import warnings
 from typing import Optional, Tuple
 
 import torch
@@ -13,8 +14,6 @@ try:
     FLASH_ATTN_2_AVAILABLE = True
 except ModuleNotFoundError:
     FLASH_ATTN_2_AVAILABLE = False
-
-import warnings
 
 __all__ = [
     'flash_attention',
