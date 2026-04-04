@@ -16,6 +16,13 @@ __all__ = [
 ]
 
 
+COMPILE_DEFAULTS = {
+    'mode': 'reduce-overhead',
+    'fullgraph': False,
+    'dynamic': True,
+}
+
+
 def _check_compile_available() -> bool:
     if not hasattr(torch, 'compile'):
         logging.warning('torch.compile not available (requires PyTorch >= 2.0)')
@@ -165,10 +172,3 @@ class GraphBreakAnalyzer:
                 times.append(elapsed)
 
         return sum(times) / len(times) if times else 0.0
-
-
-COMPILE_DEFAULTS = {
-    'mode': 'reduce-overhead',
-    'fullgraph': False,
-    'dynamic': True,
-}
