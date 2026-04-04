@@ -1,3 +1,5 @@
+from typing import Optional, Tuple
+
 import torch
 
 try:
@@ -21,20 +23,20 @@ __all__ = [
 
 
 def flash_attention(
-    q,
-    k,
-    v,
-    q_lens=None,
-    k_lens=None,
-    dropout_p=0.,
-    softmax_scale=None,
-    q_scale=None,
-    causal=False,
-    window_size=(-1, -1),
-    deterministic=False,
-    dtype=torch.bfloat16,
-    version=None,
-):
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    q_lens: Optional[torch.Tensor] = None,
+    k_lens: Optional[torch.Tensor] = None,
+    dropout_p: float = 0.,
+    softmax_scale: Optional[float] = None,
+    q_scale: Optional[float] = None,
+    causal: bool = False,
+    window_size: Tuple[int, int] = (-1, -1),
+    deterministic: bool = False,
+    dtype: torch.dtype = torch.bfloat16,
+    version: Optional[int] = None,
+) -> torch.Tensor:
     """Flash attention with variable-length sequences. q/k/v: [B, L, N, C]."""
     half_dtypes = (torch.float16, torch.bfloat16)
     assert dtype in half_dtypes
@@ -112,20 +114,20 @@ def flash_attention(
 
 
 def attention(
-    q,
-    k,
-    v,
-    q_lens=None,
-    k_lens=None,
-    dropout_p=0.,
-    softmax_scale=None,
-    q_scale=None,
-    causal=False,
-    window_size=(-1, -1),
-    deterministic=False,
-    dtype=torch.bfloat16,
-    fa_version=None,
-):
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    q_lens: Optional[torch.Tensor] = None,
+    k_lens: Optional[torch.Tensor] = None,
+    dropout_p: float = 0.,
+    softmax_scale: Optional[float] = None,
+    q_scale: Optional[float] = None,
+    causal: bool = False,
+    window_size: Tuple[int, int] = (-1, -1),
+    deterministic: bool = False,
+    dtype: torch.dtype = torch.bfloat16,
+    fa_version: Optional[int] = None,
+) -> torch.Tensor:
     if FLASH_ATTN_2_AVAILABLE or FLASH_ATTN_3_AVAILABLE:
         return flash_attention(
             q=q,
