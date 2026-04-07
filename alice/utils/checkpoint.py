@@ -21,3 +21,20 @@ __all__ = [
     'merge_sharded_checkpoint',
     'load_checkpoint_auto',
 ]
+
+
+def save_safetensors(
+    state_dict: Dict[str, torch.Tensor],
+    path: str,
+    metadata: Optional[Dict[str, str]] = None,
+):
+    if not SAFETENSORS_AVAILABLE:
+        raise ImportError('safetensors is required: pip install safetensors')
+
+    tensors = {}
+    for k, v in state_dict.items():
+        if isinstance(v, torch.Tensor):
+            tensors[k] = v.contiguous().cpu()
+
+    save_file(tensors, path, metadata=metadata)
+    logging.info(f'Saved {len(tensors)} tensors to {path}')
