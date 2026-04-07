@@ -50,3 +50,19 @@ def load_safetensors(
     state_dict = load_file(path, device=device)
     logging.info(f'Loaded {len(state_dict)} tensors from {path}')
     return state_dict
+
+
+def convert_to_safetensors(
+    input_path: str,
+    output_path: str,
+    metadata: Optional[Dict[str, str]] = None,
+):
+    logging.info(f'Converting {input_path} -> {output_path}')
+    state_dict = torch.load(input_path, map_location='cpu')
+
+    if 'model' in state_dict:
+        state_dict = state_dict['model']
+    elif 'state_dict' in state_dict:
+        state_dict = state_dict['state_dict']
+
+    save_safetensors(state_dict, output_path, metadata=metadata)
