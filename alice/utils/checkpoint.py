@@ -38,3 +38,15 @@ def save_safetensors(
 
     save_file(tensors, path, metadata=metadata)
     logging.info(f'Saved {len(tensors)} tensors to {path}')
+
+
+def load_safetensors(
+    path: str,
+    device: str = 'cpu',
+) -> Dict[str, torch.Tensor]:
+    if not SAFETENSORS_AVAILABLE:
+        raise ImportError('safetensors is required: pip install safetensors')
+
+    state_dict = load_file(path, device=device)
+    logging.info(f'Loaded {len(state_dict)} tensors from {path}')
+    return state_dict
