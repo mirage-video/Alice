@@ -125,3 +125,26 @@ def shard_checkpoint(
         f'Sharded into {len(shards)} files '
         f'({index["metadata"]["total_size"] / 1024**3:.1f} GB total)')
     return index
+
+
+def merge_sharded_checkpoint(
+    index_path: str,
+    device: str = 'cpu',
+) -> Dict[str, torch.Tensor]:
+    with open(index_path, 'r') as f:
+        index = json.load(f)
+
+    base_dir = os.path.dirname(index_path)
+    shard_files = set(index['weight_map'].values())
+
+    merged = {}
+    for shard_file in sorted(shard_files):
+        shard_path = os.path.join(base_dir, shard_file)
+        if shard_path.endswith('.safetensors') and SAFETENSORS_AVAILABLE:
+            shard_dict = load_safetensors(shard_path, device=device)
+        else:
+            shard_dict = torch.load(shard_path, map_location=device)
+        merged.update(shard_dict)
+
+    logging.info(f'Merged {len(shard_files)} shards into {len(merged)} tensors')
+    return merged
