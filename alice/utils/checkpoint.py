@@ -101,6 +101,8 @@ def shard_checkpoint(
     if current_shard:
         shards.append(current_shard)
 
+    index = {'metadata': {'total_size': 0}, 'weight_map': {}}
+
     for i, shard in enumerate(shards):
         shard_name = f'{prefix}-{i + 1:05d}-of-{len(shards):05d}.safetensors'
         shard_path = os.path.join(output_dir, shard_name)
@@ -110,4 +112,16 @@ def shard_checkpoint(
         else:
             torch.save(shard, shard_path)
 
-    logging.info(f'Sharded into {len(shards)} files')
+        for key in shard:
+            index['weight_map'][key] = shard_name
+            index['metadata']['total_size'] += (
+                shard[key].nelement() * shard[key].element_size())
+
+    index_path = os.path.join(output_dir, f'{prefix}.safetensors.index.json')
+    with open(index_path, 'w') as f:
+        json.dump(index, f, indent=2)
+
+    logging.info(
+        f'Sharded into {len(shards)} files '
+        f'({index["metadata"]["total_size"] / 1024**3:.1f} GB total)')
+    return index
