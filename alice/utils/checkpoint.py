@@ -66,3 +66,48 @@ def convert_to_safetensors(
         state_dict = state_dict['state_dict']
 
     save_safetensors(state_dict, output_path, metadata=metadata)
+
+
+def shard_checkpoint(
+    state_dict: Dict[str, torch.Tensor],
+    output_dir: str,
+    max_shard_size_gb: float = 4.0,
+    prefix: str = 'model',
+) -> Dict[str, str]:
+    os.makedirs(output_dir, exist_ok=True)
+    max_bytes = int(max_shard_size_gb * 1024 ** 3)
+
+    shards = []
+    current_shard = {}
+    current_size = 0
+
+    sorted_keys = sorted(
+        state_dict.keys(),
+        key=lambda k: state_dict[k].nelement() * state_dict[k].element_size(),
+        reverse=True)
+
+    for key in sorted_keys:
+        tensor = state_dict[key]
+        tensor_size = tensor.nelement() * tensor.element_size()
+
+        if current_size + tensor_size > max_bytes and current_shard:
+            shards.append(current_shard)
+            current_shard = {}
+            current_size = 0
+
+        current_shard[key] = tensor
+        current_size += tensor_size
+
+    if current_shard:
+        shards.append(current_shard)
+
+    for i, shard in enumerate(shards):
+        shard_name = f'{prefix}-{i + 1:05d}-of-{len(shards):05d}.safetensors'
+        shard_path = os.path.join(output_dir, shard_name)
+
+        if SAFETENSORS_AVAILABLE:
+            save_safetensors(shard, shard_path)
+        else:
+            torch.save(shard, shard_path)
+
+    logging.info(f'Sharded into {len(shards)} files')
