@@ -28,7 +28,8 @@ dependencies = [
     "imageio-ffmpeg",
     "flash_attn",
     "numpy>=1.23.5,<2",
-    "Pillow"
+    "Pillow",
+    "safetensors"
 ]
 
 [project.optional-dependencies]
