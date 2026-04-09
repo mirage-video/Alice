@@ -148,3 +148,33 @@ def merge_sharded_checkpoint(
 
     logging.info(f'Merged {len(shard_files)} shards into {len(merged)} tensors')
     return merged
+
+
+def load_checkpoint_auto(
+    path: str,
+    device: str = 'cpu',
+) -> Dict[str, torch.Tensor]:
+    if os.path.isdir(path):
+        index_path = os.path.join(path, 'model.safetensors.index.json')
+        if os.path.exists(index_path):
+            return merge_sharded_checkpoint(index_path, device=device)
+
+        for fname in os.listdir(path):
+            if fname.endswith('.safetensors'):
+                return load_safetensors(
+                    os.path.join(path, fname), device=device)
+
+        for fname in os.listdir(path):
+            if fname.endswith('.pth') or fname.endswith('.pt'):
+                return torch.load(
+                    os.path.join(path, fname), map_location=device)
+
+    if path.endswith('.safetensors') and SAFETENSORS_AVAILABLE:
+        return load_safetensors(path, device=device)
+
+    state_dict = torch.load(path, map_location=device)
+    if 'model' in state_dict:
+        return state_dict['model']
+    if 'state_dict' in state_dict:
+        return state_dict['state_dict']
+    return state_dict
