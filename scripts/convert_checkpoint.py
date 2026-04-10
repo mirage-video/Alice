@@ -73,6 +73,35 @@ def cmd_merge(args):
     logging.info(f'Merged checkpoint saved to {args.output}')
 
 
+def cmd_info(args):
+    logging.info(f'Loading checkpoint from {args.input}')
+    state_dict = load_checkpoint_auto(args.input)
+
+    total_params = 0
+    total_bytes = 0
+    dtype_counts = {}
+
+    for key, tensor in sorted(state_dict.items()):
+        params = tensor.nelement()
+        bytes_ = params * tensor.element_size()
+        total_params += params
+        total_bytes += bytes_
+
+        dtype_str = str(tensor.dtype)
+        dtype_counts[dtype_str] = dtype_counts.get(dtype_str, 0) + params
+
+    logging.info("=" * 60)
+    logging.info(f"Checkpoint: {args.input}")
+    logging.info(f"Total keys: {len(state_dict)}")
+    logging.info(f"Total params: {total_params / 1e9:.3f}B")
+    logging.info(f"Total size: {total_bytes / 1024**3:.2f} GB")
+    logging.info("")
+    logging.info("Dtype breakdown:")
+    for dtype, count in sorted(dtype_counts.items()):
+        logging.info(f"  {dtype}: {count / 1e9:.3f}B params ({count / total_params:.1%})")
+    logging.info("=" * 60)
+
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -88,6 +117,7 @@ def main():
         'to-safetensors': cmd_to_safetensors,
         'shard': cmd_shard,
         'merge': cmd_merge,
+        'info': cmd_info,
     }
     commands[args.command](args)
 
