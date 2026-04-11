@@ -56,3 +56,46 @@ class LoRALinear(nn.Module):
 
     def unmerge(self):
         pass
+
+
+class LoRAAdapter:
+
+    def __init__(
+        self,
+        rank: int = 16,
+        alpha: float = 16.0,
+        dropout: float = 0.0,
+        target_modules: Optional[List[str]] = None,
+    ):
+        self.rank = rank
+        self.alpha = alpha
+        self.dropout = dropout
+        self.target_modules = target_modules or [
+            'q', 'k', 'v', 'o',
+            'q_proj', 'k_proj', 'v_proj', 'out_proj',
+        ]
+
+    def _match_target(self, name: str) -> bool:
+        return name in self.target_modules
+
+    def apply(self, model: nn.Module) -> nn.Module:
+        injected = 0
+        for name, module in list(model.named_modules()):
+            if isinstance(module, nn.Linear) and self._match_target(name):
+                parent_name = '.'.join(name.split('.')[:-1])
+                child_name = name.split('.')[-1]
+
+                parent = model
+                if parent_name:
+                    for part in parent_name.split('.'):
+                        parent = getattr(parent, part)
+
+                lora_module = LoRALinear(
+                    module, self.rank, self.alpha, self.dropout)
+                setattr(parent, child_name, lora_module)
+                injected += 1
+
+        logging.info(
+            f'Injected LoRA adapters into {injected} layers '
+            f'(rank={self.rank}, alpha={self.alpha})')
+        return model
