@@ -41,3 +41,18 @@ class LoRALinear(nn.Module):
         base_out = self.base_layer(x)
         lora_out = self.lora_b(self.lora_a(self.lora_dropout(x)))
         return base_out + lora_out * self.scaling
+
+    def merge(self) -> nn.Linear:
+        merged = nn.Linear(
+            self.base_layer.in_features,
+            self.base_layer.out_features,
+            bias=self.base_layer.bias is not None)
+        merged.weight.data.copy_(
+            self.base_layer.weight.data +
+            (self.lora_b.weight @ self.lora_a.weight) * self.scaling)
+        if self.base_layer.bias is not None:
+            merged.bias.data.copy_(self.base_layer.bias.data)
+        return merged
+
+    def unmerge(self):
+        pass
