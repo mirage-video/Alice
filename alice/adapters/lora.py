@@ -134,3 +134,14 @@ def inject_lora(
 
     logging.info(f'Loaded {len(lora_keys)} LoRA weight tensors')
     return model
+
+
+def extract_lora(model: nn.Module) -> Dict[str, torch.Tensor]:
+    lora_state = {}
+    for name, module in model.named_modules():
+        if isinstance(module, LoRALinear):
+            lora_state[f'{name}.lora_a.weight'] = module.lora_a.weight.data.clone()
+            lora_state[f'{name}.lora_b.weight'] = module.lora_b.weight.data.clone()
+            lora_state[f'{name}.rank'] = torch.tensor(module.rank)
+            lora_state[f'{name}.alpha'] = torch.tensor(module.alpha)
+    return lora_state
