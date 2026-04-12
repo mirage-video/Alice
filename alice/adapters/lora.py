@@ -99,3 +99,38 @@ class LoRAAdapter:
             f'Injected LoRA adapters into {injected} layers '
             f'(rank={self.rank}, alpha={self.alpha})')
         return model
+
+
+def inject_lora(
+    model: nn.Module,
+    checkpoint_path: str,
+    rank: int = 16,
+    alpha: float = 16.0,
+    target_modules: Optional[List[str]] = None,
+) -> nn.Module:
+    adapter = LoRAAdapter(
+        rank=rank, alpha=alpha, target_modules=target_modules)
+    model = adapter.apply(model)
+
+    state_dict = torch.load(checkpoint_path, map_location='cpu')
+    if 'lora_state_dict' in state_dict:
+        state_dict = state_dict['lora_state_dict']
+
+    lora_keys = {k: v for k, v in state_dict.items()
+                 if 'lora_a' in k or 'lora_b' in k}
+
+    missing, unexpected = [], []
+    model_dict = model.state_dict()
+    for k, v in lora_keys.items():
+        if k in model_dict:
+            model_dict[k] = v
+        else:
+            unexpected.append(k)
+
+    model.load_state_dict(model_dict, strict=False)
+
+    if unexpected:
+        logging.warning(f'Unexpected LoRA keys: {unexpected}')
+
+    logging.info(f'Loaded {len(lora_keys)} LoRA weight tensors')
+    return model
