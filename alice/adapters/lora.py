@@ -145,3 +145,23 @@ def extract_lora(model: nn.Module) -> Dict[str, torch.Tensor]:
             lora_state[f'{name}.rank'] = torch.tensor(module.rank)
             lora_state[f'{name}.alpha'] = torch.tensor(module.alpha)
     return lora_state
+
+
+def merge_lora_weights(model: nn.Module) -> nn.Module:
+    merged_count = 0
+    for name, module in list(model.named_modules()):
+        if isinstance(module, LoRALinear):
+            parent_name = '.'.join(name.split('.')[:-1])
+            child_name = name.split('.')[-1]
+
+            parent = model
+            if parent_name:
+                for part in parent_name.split('.'):
+                    parent = getattr(parent, part)
+
+            merged_linear = module.merge()
+            setattr(parent, child_name, merged_linear)
+            merged_count += 1
+
+    logging.info(f'Merged {merged_count} LoRA adapters into base weights')
+    return model
