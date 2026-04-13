@@ -76,7 +76,8 @@ class LoRAAdapter:
         ]
 
     def _match_target(self, name: str) -> bool:
-        return name in self.target_modules
+        module_name = name.split('.')[-1]
+        return module_name in self.target_modules
 
     def apply(self, model: nn.Module) -> nn.Module:
         injected = 0
