@@ -83,5 +83,43 @@ def _parse_args():
     return parser.parse_args()
 
 
+def _load_prompts(prompt_file: str):
+    prompts = []
+
+    if prompt_file.endswith('.jsonl'):
+        with open(prompt_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    item = json.loads(line)
+                    if isinstance(item, str):
+                        prompts.append({'prompt': item})
+                    elif isinstance(item, dict):
+                        prompts.append(item)
+    elif prompt_file.endswith('.json'):
+        with open(prompt_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                for item in data:
+                    if isinstance(item, str):
+                        prompts.append({'prompt': item})
+                    elif isinstance(item, dict):
+                        prompts.append(item)
+            elif isinstance(data, dict) and 'prompts' in data:
+                for item in data['prompts']:
+                    if isinstance(item, str):
+                        prompts.append({'prompt': item})
+                    elif isinstance(item, dict):
+                        prompts.append(item)
+    elif prompt_file.endswith('.txt'):
+        with open(prompt_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    prompts.append({'prompt': line})
+
+    return prompts
+
+
 if __name__ == "__main__":
     args = _parse_args()
