@@ -121,5 +121,103 @@ def _load_prompts(prompt_file: str):
     return prompts
 
 
-if __name__ == "__main__":
+def main():
     args = _parse_args()
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[%(asctime)s] %(levelname)s: %(message)s",
+        handlers=[logging.StreamHandler(stream=sys.stdout)])
+
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    prompts = _load_prompts(args.prompt_file)
+    logging.info(f"Loaded {len(prompts)} prompts from {args.prompt_file}")
+
+    cfg = ALICE_CONFIGS[args.task]
+
+    if args.sample_steps is None:
+        args.sample_steps = cfg.sample_steps
+    if args.sample_shift is None:
+        args.sample_shift = cfg.sample_shift
+    if args.sample_guide_scale is None:
+        args.sample_guide_scale = cfg.sample_guide_scale
+    if args.frame_num is None:
+        args.frame_num = cfg.frame_num
+
+    import alice
+    logging.info("Creating pipeline...")
+    pipeline = alice.AliceTextToVideo(
+        config=cfg,
+        checkpoint_dir=args.ckpt_dir,
+        device_id=0,
+        rank=0,
+        convert_model_dtype=args.convert_model_dtype,
+    )
+
+    results = []
+    total_time = 0
+
+    for i, item in enumerate(prompts):
+        prompt = item['prompt']
+        seed = item.get('seed', args.base_seed + i)
+        output_name = item.get('name', f'{i:05d}')
+        output_path = os.path.join(args.output_dir, f'{output_name}.mp4')
+
+        logging.info(f"[{i+1}/{len(prompts)}] Generating: {prompt[:80]}...")
+        start = time.perf_counter()
+
+        try:
+            video = pipeline.generate(
+                prompt,
+                size=SIZE_CONFIGS[args.size],
+                frame_num=args.frame_num,
+                shift=args.sample_shift,
+                sample_solver=args.sample_solver,
+                sampling_steps=args.sample_steps,
+                guide_scale=args.sample_guide_scale,
+                seed=seed,
+                offload_model=args.offload_model)
+
+            elapsed = time.perf_counter() - start
+            total_time += elapsed
+
+            save_video(
+                tensor=video[None],
+                save_file=output_path,
+                fps=cfg.sample_fps,
+                nrow=1,
+                normalize=True,
+                value_range=(-1, 1))
+            del video
+
+            results.append({
+                'name': output_name,
+                'prompt': prompt,
+                'seed': seed,
+                'time_s': elapsed,
+                'status': 'success',
+                'output': output_path,
+            })
+            logging.info(f"  Saved to {output_path} ({elapsed:.1f}s)")
+
+        except Exception as e:
+            elapsed = time.perf_counter() - start
+            results.append({
+                'name': output_name,
+                'prompt': prompt,
+                'seed': seed,
+                'time_s': elapsed,
+                'status': 'failed',
+                'error': str(e),
+            })
+            logging.error(f"  Failed: {e}")
+
+        torch.cuda.empty_cache()
+
+    logging.info("=" * 60)
+    logging.info(f"Batch generation complete")
+
+
+if __name__ == "__main__":
+    main()
