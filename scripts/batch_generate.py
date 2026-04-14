@@ -164,6 +164,10 @@ def main():
         output_name = item.get('name', f'{i:05d}')
         output_path = os.path.join(args.output_dir, f'{output_name}.mp4')
 
+        if args.skip_existing and os.path.exists(output_path):
+            logging.info(f"[{i+1}/{len(prompts)}] Skipping (exists): {output_path}")
+            continue
+
         logging.info(f"[{i+1}/{len(prompts)}] Generating: {prompt[:80]}...")
         start = time.perf_counter()
 
