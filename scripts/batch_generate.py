@@ -219,8 +219,22 @@ def main():
 
         torch.cuda.empty_cache()
 
+    summary_path = os.path.join(args.output_dir, 'batch_results.json')
+    summary = {
+        'total_prompts': len(prompts),
+        'completed': sum(1 for r in results if r['status'] == 'success'),
+        'failed': sum(1 for r in results if r['status'] == 'failed'),
+        'total_time_s': total_time,
+        'avg_time_s': total_time / max(1, len(results)),
+        'results': results,
+    }
+    with open(summary_path, 'w', encoding='utf-8') as f:
+        json.dump(summary, f, indent=2, ensure_ascii=False)
+
     logging.info("=" * 60)
-    logging.info(f"Batch generation complete")
+    logging.info(f"Batch generation complete: {summary['completed']}/{len(prompts)} succeeded")
+    logging.info(f"Total time: {total_time:.1f}s, avg: {summary['avg_time_s']:.1f}s/video")
+    logging.info(f"Results saved to {summary_path}")
 
 
 if __name__ == "__main__":
