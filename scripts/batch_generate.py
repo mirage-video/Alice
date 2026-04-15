@@ -76,6 +76,11 @@ def _parse_args():
         default=False,
         help="Skip prompts whose output files already exist.")
     parser.add_argument(
+        "--max_prompts",
+        type=int,
+        default=None,
+        help="Maximum number of prompts to process.")
+    parser.add_argument(
         "--convert_model_dtype",
         action="store_true",
         default=False,
@@ -132,6 +137,9 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
 
     prompts = _load_prompts(args.prompt_file)
+    if args.max_prompts is not None:
+        prompts = prompts[:args.max_prompts]
+
     logging.info(f"Loaded {len(prompts)} prompts from {args.prompt_file}")
 
     cfg = ALICE_CONFIGS[args.task]
