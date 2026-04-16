@@ -106,6 +106,95 @@ def memory_estimate(args):
     return estimates
 
 
+def full_benchmark(args):
+    import alice
+    from alice.utils.utils import save_video
+
+    cfg = ALICE_CONFIGS[args.task]
+    h, w = SIZE_CONFIGS[args.size]
+
+    tracker = MemoryTracker()
+    tracker.snapshot('before_model_load')
+
+    logging.info(f"Loading model from {args.ckpt_dir}")
+    pipeline = alice.AliceTextToVideo(
+        config=cfg,
+        checkpoint_dir=args.ckpt_dir,
+        device_id=0,
+        rank=0,
+        offload_model=True)
+    tracker.snapshot('after_model_load')
+
+    prompt = "A serene lake surrounded by mountains at sunset, birds flying across the sky."
+
+    for i in range(args.num_warmup):
+        logging.info(f"Warmup {i + 1}/{args.num_warmup}")
+        _ = pipeline.generate(
+            prompt,
+            size=(w, h),
+            frame_num=args.frame_num,
+            seed=42,
+            offload_model=True)
+        clear_gpu_memory()
+
+    tracker.snapshot('after_warmup')
+
+    times = []
+    for i in range(args.num_iterations):
+        logging.info(f"Iteration {i + 1}/{args.num_iterations}")
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+
+        start = time.perf_counter()
+        _ = pipeline.generate(
+            prompt,
+            size=(w, h),
+            frame_num=args.frame_num,
+            seed=42 + i,
+            offload_model=True)
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        elapsed = time.perf_counter() - start
+        times.append(elapsed)
+        logging.info(f"  Time: {elapsed:.2f}s")
+        clear_gpu_memory()
+
+    tracker.snapshot('after_benchmark')
+
+    avg_time = sum(times) / len(times)
+    min_time = min(times)
+    max_time = max(times)
+
+    results = {
+        'task': args.task,
+        'resolution': f'{w}x{h}',
+        'frames': args.frame_num,
+        'avg_time_s': avg_time,
+        'min_time_s': min_time,
+        'max_time_s': max_time,
+        'fps': args.frame_num / avg_time,
+        'iterations': args.num_iterations,
+        'memory_snapshots': tracker.report(),
+    }
+
+    logging.info("=" * 60)
+    logging.info("Benchmark Results")
+    logging.info("=" * 60)
+    logging.info(f"  Avg time: {avg_time:.2f}s")
+    logging.info(f"  Min time: {min_time:.2f}s")
+    logging.info(f"  Max time: {max_time:.2f}s")
+    logging.info(f"  Throughput: {results['fps']:.2f} frames/s")
+    logging.info("=" * 60)
+
+    if args.output:
+        import json
+        with open(args.output, 'w') as f:
+            json.dump(results, f, indent=2, default=str)
+        logging.info(f"Results saved to {args.output}")
+
+    return results
+
+
 def main():
     args = _parse_args()
     logging.basicConfig(
@@ -124,6 +213,7 @@ def main():
             logging.error("--ckpt_dir required for full benchmark. Use --memory_only for estimation.")
             sys.exit(1)
         memory_estimate(args)
+        full_benchmark(args)
 
 
 if __name__ == "__main__":
