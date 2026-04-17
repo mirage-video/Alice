@@ -76,3 +76,52 @@ class TestFP8Linear:
         orig_out = linear(x)
         fp8_out = fp8(x)
         assert torch.allclose(orig_out, fp8_out, atol=0.1)
+
+
+class TestQuantizeModel:
+
+    def test_quantize_dequantize(self):
+        model = nn.Sequential(
+            nn.Linear(64, 128),
+            nn.ReLU(),
+            nn.Linear(128, 32),
+        )
+        quantize_model(model)
+        assert isinstance(model[0], FP8Linear)
+        assert isinstance(model[2], FP8Linear)
+
+        dequantize_model(model)
+        assert isinstance(model[0], nn.Linear)
+        assert isinstance(model[2], nn.Linear)
+
+    def test_skip_modules(self):
+        model = nn.Sequential(
+            nn.Linear(64, 128),
+            nn.ReLU(),
+            nn.Linear(128, 32),
+        )
+        quantize_model(model, skip_modules=['2'])
+        assert isinstance(model[0], FP8Linear)
+        assert isinstance(model[2], nn.Linear)
+
+
+class TestCalibration:
+
+    def test_calibration_context(self):
+        model = nn.Sequential(
+            nn.Linear(32, 64),
+            nn.ReLU(),
+            nn.Linear(64, 16),
+        )
+        model.eval()
+
+        with CalibrationContext(model, num_batches=4) as ctx:
+            for _ in range(4):
+                x = torch.randn(2, 32)
+                with torch.no_grad():
+                    model(x)
+                ctx.step()
+            assert ctx.is_complete
+            scales = ctx.compute_scales()
+
+        assert len(scales) > 0
