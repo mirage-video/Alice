@@ -51,3 +51,28 @@ class TestQuantUtils:
         assert 'e4m3fn' in info
         assert 'e5m2' in info
         assert info['e4m3fn']['max'] > 0
+
+
+class TestFP8Linear:
+
+    def test_from_linear(self):
+        linear = nn.Linear(128, 256)
+        fp8 = FP8Linear.from_linear(linear)
+        assert fp8.weight.dtype == torch.float8_e4m3fn
+        assert fp8.in_features == 128
+        assert fp8.out_features == 256
+
+    def test_forward(self):
+        linear = nn.Linear(64, 32)
+        fp8 = FP8Linear.from_linear(linear)
+        x = torch.randn(4, 64)
+        out = fp8(x)
+        assert out.shape == (4, 32)
+
+    def test_forward_matches_original(self):
+        linear = nn.Linear(64, 32, bias=True)
+        fp8 = FP8Linear.from_linear(linear)
+        x = torch.randn(2, 64)
+        orig_out = linear(x)
+        fp8_out = fp8(x)
+        assert torch.allclose(orig_out, fp8_out, atol=0.1)
