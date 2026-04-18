@@ -92,3 +92,18 @@ class TestCLIPConfigs:
         assert cfg['dim'] == 1024
         assert cfg['num_layers'] == 24
         assert cfg['patch_size'] == 14
+
+
+class TestI2VConfig:
+
+    def test_i2v_config_exists(self):
+        assert 'i2v-14b' in ALICE_CONFIGS
+
+    def test_i2v_has_clip_fields(self):
+        cfg = ALICE_CONFIGS['i2v-14b']
+        assert hasattr(cfg, 'clip_model')
+        assert hasattr(cfg, 'clip_checkpoint')
+        assert hasattr(cfg, 'clip_projection_dim')
+
+    def test_i2v_supported_sizes(self):
+        assert 'i2v-14b' in SUPPORTED_SIZES
