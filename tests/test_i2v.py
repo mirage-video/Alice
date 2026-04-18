@@ -58,3 +58,37 @@ class TestCLIPVisionTransformer:
         assert out.shape[2] == 128
         num_patches = (56 // 14) ** 2
         assert out.shape[1] == num_patches + 1
+
+
+class TestCLIPImageProcessor:
+
+    def test_single_image(self):
+        processor = CLIPImageProcessor(image_size=224)
+        img = torch.rand(1, 3, 512, 512)
+        out = processor(img)
+        assert out.shape == (1, 3, 224, 224)
+
+    def test_batch(self):
+        processor = CLIPImageProcessor(image_size=224)
+        img = torch.rand(4, 3, 256, 256)
+        out = processor(img)
+        assert out.shape == (4, 3, 224, 224)
+
+    def test_3d_input(self):
+        processor = CLIPImageProcessor(image_size=224)
+        img = torch.rand(3, 128, 128)
+        out = processor(img)
+        assert out.shape == (1, 3, 224, 224)
+
+
+class TestCLIPConfigs:
+
+    def test_configs_exist(self):
+        assert 'ViT-L/14' in CLIP_CONFIGS
+        assert 'ViT-H/14' in CLIP_CONFIGS
+
+    def test_vit_l_config(self):
+        cfg = CLIP_CONFIGS['ViT-L/14']
+        assert cfg['dim'] == 1024
+        assert cfg['num_layers'] == 24
+        assert cfg['patch_size'] == 14
