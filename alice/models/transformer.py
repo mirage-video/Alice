@@ -1,4 +1,5 @@
 import math
+from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -319,12 +320,12 @@ class AliceTransformer(ModelMixin, ConfigMixin):
 
     def forward(
         self,
-        x,
-        t,
-        context,
-        seq_len,
-        y=None,
-    ):
+        x: list,
+        t: torch.Tensor,
+        context: list,
+        seq_len: int,
+        y: Optional[list] = None,
+    ) -> List[torch.Tensor]:
         """Predict noise for diffusion. Returns list of [C_out, F, H/8, W/8] tensors."""
         if self.model_type == 'i2v':
             assert y is not None
