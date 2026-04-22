@@ -28,6 +28,46 @@ Alice is a 14-billion parameter open-source text-to-video generation model devel
 - Surpasses teacher model quality through distillation-enhanced training
 - Fully open-source: weights, training code, and data pipelines
 
+## What's New in v0.2.0
+
+- **Image-to-Video (I2V)**: Generate videos from reference images with CLIP ViT-L/14 conditioning
+- **FP8 Quantization**: Run inference on consumer GPUs (RTX 4080/4090) with minimal quality loss
+- **VAE Tiling**: Memory-efficient encoding/decoding for high-resolution video
+- **LoRA Adapters**: Load and merge LoRA weights for fine-tuned inference
+- **SafeTensors**: Fast, safe checkpoint loading with sharding support
+- **Batch Inference**: Process multiple prompts from JSON/JSONL/TXT files
+- **torch.compile**: Optional compilation for inference acceleration
+
+### I2V Generation
+
+```bash
+python scripts/generate_i2v.py \
+    --task i2v-14b \
+    --input_image reference.jpg \
+    --prompt "The scene slowly comes to life as the wind gently sways the trees" \
+    --ckpt_dir ./checkpoints \
+    --size 1280*720
+```
+
+### FP8 Quantization
+
+```bash
+python scripts/quantize_model.py \
+    --input_dir ./checkpoints \
+    --output_dir ./checkpoints_fp8 \
+    --verify
+```
+
+### Batch Inference
+
+```bash
+python scripts/batch_generate.py \
+    --task t2v-14b \
+    --prompt_file prompts.jsonl \
+    --output_dir ./outputs \
+    --ckpt_dir ./checkpoints
+```
+
 ## Architecture
 
 Alice builds on a Diffusion Transformer (DiT) architecture with the following specifications:
