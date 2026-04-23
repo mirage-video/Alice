@@ -43,6 +43,7 @@ dev = [
 ]
 
 [project.urls]
+repository = "https://github.com/mirage-video/Alice"
 huggingface = "https://huggingface.co/gomirageai/Mirage-T2V-14B-MoE"
 
 [tool.setuptools]
