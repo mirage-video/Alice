@@ -39,7 +39,8 @@ dev = [
     "flake8",
     "isort",
     "mypy",
-    "huggingface-hub[cli]"
+    "huggingface-hub[cli]",
+    "safetensors"
 ]
 
 [project.urls]

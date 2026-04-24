@@ -71,15 +71,15 @@ def _parse_args():
         default=42,
         help="Base seed (incremented per prompt).")
     parser.add_argument(
-        "--skip_existing",
-        action="store_true",
-        default=False,
-        help="Skip prompts whose output files already exist.")
-    parser.add_argument(
         "--max_prompts",
         type=int,
         default=None,
         help="Maximum number of prompts to process.")
+    parser.add_argument(
+        "--skip_existing",
+        action="store_true",
+        default=False,
+        help="Skip prompts whose output files already exist.")
     parser.add_argument(
         "--convert_model_dtype",
         action="store_true",
