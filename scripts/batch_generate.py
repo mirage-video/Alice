@@ -81,6 +81,11 @@ def _parse_args():
         default=False,
         help="Skip prompts whose output files already exist.")
     parser.add_argument(
+        "--input_image",
+        type=str,
+        default=None,
+        help="Default input image for I2V batch generation.")
+    parser.add_argument(
         "--convert_model_dtype",
         action="store_true",
         default=False,
@@ -153,15 +158,28 @@ def main():
     if args.frame_num is None:
         args.frame_num = cfg.frame_num
 
-    import alice
-    logging.info("Creating pipeline...")
-    pipeline = alice.AliceTextToVideo(
-        config=cfg,
-        checkpoint_dir=args.ckpt_dir,
-        device_id=0,
-        rank=0,
-        convert_model_dtype=args.convert_model_dtype,
-    )
+    is_i2v = args.task.startswith('i2v')
+
+    if is_i2v:
+        from alice.pipeline import AliceImageToVideo
+        logging.info("Creating I2V pipeline...")
+        pipeline = AliceImageToVideo(
+            config=cfg,
+            checkpoint_dir=args.ckpt_dir,
+            device_id=0,
+            rank=0,
+            convert_model_dtype=args.convert_model_dtype,
+        )
+    else:
+        import alice
+        logging.info("Creating T2V pipeline...")
+        pipeline = alice.AliceTextToVideo(
+            config=cfg,
+            checkpoint_dir=args.ckpt_dir,
+            device_id=0,
+            rank=0,
+            convert_model_dtype=args.convert_model_dtype,
+        )
 
     results = []
     total_time = 0
@@ -180,16 +198,39 @@ def main():
         start = time.perf_counter()
 
         try:
-            video = pipeline.generate(
-                prompt,
-                size=SIZE_CONFIGS[args.size],
-                frame_num=args.frame_num,
-                shift=args.sample_shift,
-                sample_solver=args.sample_solver,
-                sampling_steps=args.sample_steps,
-                guide_scale=args.sample_guide_scale,
-                seed=seed,
-                offload_model=args.offload_model)
+            if is_i2v:
+                from torchvision import transforms
+                from PIL import Image
+                img_path = item.get('image', args.input_image)
+                if img_path is None:
+                    raise ValueError("I2V requires --input_image or 'image' field in prompt")
+                img = Image.open(img_path).convert('RGB')
+                img_tensor = transforms.Compose([
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=[0.5]*3, std=[0.5]*3),
+                ])(img)
+                video = pipeline.generate(
+                    prompt,
+                    input_image=img_tensor,
+                    size=SIZE_CONFIGS[args.size],
+                    frame_num=args.frame_num,
+                    shift=args.sample_shift,
+                    sample_solver=args.sample_solver,
+                    sampling_steps=args.sample_steps,
+                    guide_scale=args.sample_guide_scale,
+                    seed=seed,
+                    offload_model=args.offload_model)
+            else:
+                video = pipeline.generate(
+                    prompt,
+                    size=SIZE_CONFIGS[args.size],
+                    frame_num=args.frame_num,
+                    shift=args.sample_shift,
+                    sample_solver=args.sample_solver,
+                    sampling_steps=args.sample_steps,
+                    guide_scale=args.sample_guide_scale,
+                    seed=seed,
+                    offload_model=args.offload_model)
 
             elapsed = time.perf_counter() - start
             total_time += elapsed
