@@ -68,6 +68,36 @@ python scripts/batch_generate.py \
     --ckpt_dir ./checkpoints
 ```
 
+## Installation
+
+### Prerequisites
+
+- Python >= 3.10
+- CUDA >= 12.1
+- PyTorch >= 2.4.0
+
+### Install from source
+
+```bash
+git clone https://github.com/mirage-video/Alice.git
+cd Alice
+pip install -e .
+```
+
+For development tools (testing, linting):
+
+```bash
+pip install -e ".[dev]"
+```
+
+### Flash Attention
+
+Flash Attention must be installed separately:
+
+```bash
+pip install flash-attn --no-build-isolation
+```
+
 ## Architecture
 
 Alice builds on a Diffusion Transformer (DiT) architecture with the following specifications:
