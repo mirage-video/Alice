@@ -115,7 +115,7 @@ class StreamingDecoder:
 
         result_parts = [chunks[0]]
         for i in range(1, len(chunks)):
-            trim = self.blend_frames if i < len(chunks) else 0
+            trim = self.blend_frames if i < len(chunks) - 1 else 0
             if trim > 0 and chunks[i].shape[1] > trim:
                 result_parts.append(chunks[i][:, trim:])
             else:
