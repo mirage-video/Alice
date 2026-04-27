@@ -5,22 +5,7 @@ All notable changes to the Alice project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Added
-- I2V task support in batch generation script
-- Tests for LoRA adapter module
-- Tests for streaming decoder and VAE tiling
-- Sample prompts file for batch generation
-- Installation section in README
-- Utils `__init__.py` exports for all new submodules
-
-### Fixed
-- Streaming decoder chunk trimming for last chunk
-- Utils module exports not accessible from top-level `alice.utils`
-
-
-## [0.2.0] - 2026-04-24
+## [1.0.0] - 2026-04-27
 
 ### Added
 - Image-to-Video (I2V) generation pipeline with CLIP ViT-L/14 vision encoder
@@ -32,24 +17,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - LoRA adapter loading and weight merging for inference
 - SafeTensors checkpoint support with sharding and auto-detection
 - Batch inference script with prompt file support (JSON/JSONL/TXT)
+- I2V batch generation support in batch script
 - Inference benchmark script with memory estimation and profiling
 - Checkpoint conversion utilities (to-safetensors, shard, merge, info)
 - LoRA weight merging script
 - FP8 model quantization script with calibration support
 - GPU memory tracking and VRAM estimation utilities
 - I2V CLI generation script
-- Tests for quantization, I2V pipeline, and CLIP vision encoder
+- Sample prompts file for batch generation
+- Installation section in README
+- Tests for quantization, I2V pipeline, CLIP vision encoder, LoRA, and streaming
+- Utils `__init__.py` exports for all new submodules
 
 ### Changed
-- Updated `pyproject.toml` to version 0.2.0
+- Bumped version to 1.0.0
 - Added `safetensors`, `Pillow` to dependencies
 - Updated `transformers` version constraint
 - Expanded model `__init__.py` exports with new modules
+- Migrated deprecated `torch.cuda.amp` imports to `torch.amp`
 - Cleaned up unused imports across model files
 
 ### Fixed
-- Type annotations in attention module
-- Minor cleanup in VAE cache handling comments
+- Type annotations in attention and transformer modules
+- Streaming decoder chunk trimming for last chunk
+- VAE autocast deprecation warnings
 
 
 ## [0.1.0] - 2026-02-25
