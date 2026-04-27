@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "alice"
-version = "0.2.0"
+version = "1.0.0"
 description = "Alice: Text-to-Video Generation Model"
 authors = [
     { name = "Mirage Team" }
